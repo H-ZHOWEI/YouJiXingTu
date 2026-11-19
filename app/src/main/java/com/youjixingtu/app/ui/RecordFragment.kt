@@ -15,6 +15,8 @@ import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.CompoundButton
 import android.widget.EditText
 import android.widget.TextView
@@ -23,6 +25,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
+import com.youjixingtu.app.R
 import com.youjixingtu.app.core.Analytics
 import com.youjixingtu.app.data.Repository
 import com.youjixingtu.app.databinding.FragmentRecordBinding
@@ -50,6 +53,8 @@ class RecordFragment : Fragment() {
     private var suppressStationPrompt = false
     /** 「我忘记了」勾选前的原值，取消勾选时还原（C4） */
     private val forgotSavedValues = mutableMapOf<Int, String>()
+    /** I13：空数据引导只提示一次 */
+    private var hasShownEmptyGuide = false
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
     private val dayFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -91,6 +96,19 @@ class RecordFragment : Fragment() {
                 }
             }
         }
+    }
+
+    /** I8：供外部（低油量横幅）一键直达选加油站页 */
+    fun openNearbyStation() {
+        switchToRecordTab()
+        suppressStationPrompt = false
+        binding.refuelCheck.isChecked = true
+        val intent = Intent(requireContext(), NearbyStationActivity::class.java)
+        nearbyStationLauncher.launch(intent)
+    }
+
+    private fun switchToRecordTab() {
+        (activity as? MainActivity)?.selectTab(R.id.nav_record)
     }
 
     /** 将选中的加油站填入「加油站名称」与「去了哪里」 */
@@ -135,14 +153,79 @@ class RecordFragment : Fragment() {
         binding.mileageInput.setText(getLastMileage().toString().takeIf { it != "0" } ?: "")
         binding.fuelTypeSpinner.setSelection(fuelTypePosition(requireContext(), Repository.lastFuelType))
 
+        setupDestinationSuggestions()
         updateEstimateCard()
         updateMiniStats()
         showLastPhoto()
+        updateSmartHint()
+        // I13：首次进入且无任何记录时给一次上手引导
+        if (records.isEmpty() && !hasShownEmptyGuide) {
+            hasShownEmptyGuide = true
+            requireContext().toast("欢迎使用！先拍张小票或手动记一笔，记满 2 次加油就能自动算油耗", long = true)
+        }
+    }
+
+    /** 汇总当前表单可给出的智能提示（油量/容量冲突等） */
+    private fun updateSmartHint() {
+        if (records.isEmpty()) {
+            smartHint(null)
+            return
+        }
+        val capacity = Repository.tankCapacity.takeIf { it in 20..200 }
+            ?: Analytics.estimateTankCapacity(records)
+        val manual = binding.manualTankCapacityInput.intOrNull()
+        if (manual != null) {
+            Analytics.capacityConflictHint(manual, capacity)?.let { smartHint(it); return }
+        }
+        val remaining = Analytics.calculateRemainingFuel(records, capacity)
+        if (remaining != null) {
+            val pct = (remaining / capacity * 100).toInt()
+            if (pct <= 15) {
+                smartHint("⚠ 当前油量仅剩约 $pct%，建议尽快加油；勾选「本次加油了」可一键查找附近加油站。")
+                return
+            }
+        }
+        smartHint(null)
     }
 
     private fun getLastMileage(): Int {
         val latest = records.firstOrNull { !it.mileageForgotten && it.mileage != null }
         return latest?.mileage ?: 0
+    }
+
+    /** 智能提示：在表单内就地展示，不打断输入 */
+    private fun smartHint(message: String?) {
+        binding.smartHintText.visibility = if (message.isNullOrBlank()) View.GONE else View.VISIBLE
+        binding.smartHintText.text = message.orEmpty()
+    }
+
+    /** I15：为「去了哪里」接入常用目的地补全 */
+    private fun setupDestinationSuggestions() {
+        val dest = binding.destinationInput as AutoCompleteTextView
+        val suggestions = Analytics.frequentDestinations(records)
+        dest.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, suggestions))
+    }
+
+    /** I2：选中加油站后按历史带出该站最常用油品；I10 油箱容量冲突；I1 加油量推断加满 */
+    private fun applySmartFuelHints(station: String) {
+        if (station.isBlank()) return
+        Analytics.stationFuelType(records, station)?.let { type ->
+            val pos = fuelTypePosition(requireContext(), type)
+            if (pos > 0 && binding.fuelTypeSpinner.selectedItemPosition == 0) {
+                binding.fuelTypeSpinner.setSelection(pos)
+            }
+        }
+    }
+
+    private fun inferTankFromLiters() {
+        val liters = binding.fuelLitersInput.doubleOrNull()
+        val capacity = Repository.tankCapacity.takeIf { it in 20..200 }
+            ?: Analytics.estimateTankCapacity(records)
+        when (Analytics.inferTankStatus(liters, capacity)) {
+            "full" -> binding.tankFullRadio.isChecked = true
+            "partial" -> binding.tankPartialRadio.isChecked = true
+            else -> {}
+        }
     }
 
     private fun setupListeners() {
@@ -178,6 +261,8 @@ class RecordFragment : Fragment() {
             if (binding.refuelCheck.isChecked && binding.destinationInput.text.isNullOrBlank()) {
                 binding.destinationInput.setText(text)
             }
+            // I2：历史该站常用油品自动带出
+            applySmartFuelHints(text.toString().trim())
         })
 
         // A4：移除「金额>200 且有小数即判加满」的粗暴推断，油箱状态完全交由用户手动选择
@@ -192,7 +277,10 @@ class RecordFragment : Fragment() {
 
         binding.tankFullRadio.setOnCheckedChangeListener { _, _ -> updateEstimateCard() }
         binding.tankPartialRadio.setOnCheckedChangeListener { _, _ -> updateEstimateCard() }
-        binding.fuelLitersInput.addTextChangedListener(simpleTextWatcher { updateEstimateCard() })
+        binding.fuelLitersInput.addTextChangedListener(simpleTextWatcher {
+            inferTankFromLiters() // I1：按加油量推断是否加满
+            updateEstimateCard()
+        })
         binding.mileageInput.addTextChangedListener(simpleTextWatcher {
             if (!dateTimeLocked && it.isNotBlank()) {
                 currentDate = Date()
@@ -208,9 +296,25 @@ class RecordFragment : Fragment() {
                 requireContext().toast("请输入有效的油箱容量（20-200升）")
                 return@setOnClickListener
             }
+            val estimated = Analytics.estimateTankCapacity(records)
+            Analytics.capacityConflictHint(capacity, estimated)?.let { hint ->
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("请确认油箱容量")
+                    .setMessage(hint)
+                    .setNegativeButton("返回修改", null)
+                    .setPositiveButton("确认保存") { _, _ ->
+                        Repository.tankCapacity = capacity
+                        requireContext().toast("油箱容量已设置为 $capacity 升")
+                        updateEstimateCard()
+                        updateSmartHint()
+                    }
+                    .show()
+                return@setOnClickListener
+            }
             Repository.tankCapacity = capacity
             requireContext().toast("油箱容量已设置为 $capacity 升")
             updateEstimateCard()
+            updateSmartHint()
         }
 
         binding.takePhotoBtn.setOnClickListener {
@@ -300,6 +404,38 @@ class RecordFragment : Fragment() {
         val station = binding.gasStationInput.text.toString().trim()
         val liters = binding.fuelLitersInput.doubleOrNull()
         val cost = binding.fuelCostInput.doubleOrNull()
+
+        // I3：重复记录检测 —— 用户确认后才继续
+        Analytics.detectDuplicateHint(records, currentDate, mileage, refuel)?.let { hint ->
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("可能是重复记录")
+                .setMessage("$hint\n\n如果确实要记录，请点「仍然保存」。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("仍然保存") { _, _ -> persistRecord(mileage, destination, refuel, station, liters, cost) }
+                .show()
+            return
+        }
+        // I4：里程量级异常提醒 —— 用户确认后才继续
+        if (mileage != null) {
+            Analytics.mileageAnomalyHint(records, currentDate, mileage)?.let { hint ->
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("请确认公里数")
+                    .setMessage("$hint\n\n确认无误请点「继续保存」。")
+                    .setNegativeButton("返回修改", null)
+                    .setPositiveButton("继续保存") { _, _ -> persistRecord(mileage, destination, refuel, station, liters, cost) }
+                    .show()
+                return
+            }
+        }
+        persistRecord(mileage, destination, refuel, station, liters, cost)
+    }
+
+    /** 真正落盘（从 saveRecord 抽出，供智能提示确认后复用） */
+    private fun persistRecord(
+        mileage: Int?, destination: String, refuel: Boolean, station: String,
+        liters: Double?, cost: Double?
+    ) {
+        val forgotMileage = binding.forgotMileageCheck.isChecked
         val fuelType = fuelTypeValue(requireContext(), binding.fuelTypeSpinner.selectedItemPosition)
         val forgotStation = binding.forgotGasStationCheck.isChecked
         val forgotLiters = binding.forgotFuelLitersCheck.isChecked

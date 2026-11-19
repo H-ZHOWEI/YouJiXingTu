@@ -2,16 +2,20 @@
 <resources>
     <string-array name="fuel_types">
         <item>请选择油品类型</item>
+        <item>89号汽油</item>
         <item>92号汽油</item>
         <item>95号汽油</item>
         <item>98号汽油</item>
         <item>0号柴油</item>
+        <item>-10号柴油</item>
     </string-array>
     <string-array name="fuel_type_values" translatable="false">
         <item></item>
+        <item>89</item>
         <item>92</item>
         <item>95</item>
         <item>98</item>
         <item>0</item>
+        <item>-10</item>
     </string-array>
 </resources>

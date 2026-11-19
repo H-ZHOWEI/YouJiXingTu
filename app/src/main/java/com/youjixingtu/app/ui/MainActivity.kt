@@ -6,9 +6,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.youjixingtu.app.R
+import com.youjixingtu.app.core.Analytics
+import com.youjixingtu.app.data.Repository
 import com.youjixingtu.app.databinding.ActivityMainBinding
 import com.youjixingtu.app.util.UpdateManager
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -75,12 +80,51 @@ class MainActivity : AppCompatActivity() {
         binding.updateNowBtn.setOnClickListener {
             pendingInfo?.let { startUpdate(it) }
         }
+
+        // I8：低油量横幅按钮
+        binding.lowFuelGoBtn.setOnClickListener {
+            binding.lowFuelBanner.visibility = View.GONE
+            recordFragment.openNearbyStation()
+        }
+        binding.lowFuelDismissBtn.setOnClickListener {
+            Repository.lowFuelNoticeDay = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+            binding.lowFuelBanner.visibility = View.GONE
+        }
     }
 
     override fun onResume() {
         super.onResume()
         binding.starField.resumeAnimation() // D1
         silentCheck()
+        checkLowFuel()
+    }
+
+    /** I8：低油量主动提醒，每天最多一次 */
+    private fun checkLowFuel() {
+        val records = Repository.loadRecords()
+        if (records.isEmpty()) return
+        val capacity = Repository.tankCapacity.takeIf { it in 20..200 }
+            ?: Analytics.estimateTankCapacity(records)
+        val remaining = Analytics.calculateRemainingFuel(records, capacity) ?: return
+        val pct = remaining / capacity * 100
+        if (pct > 15) return
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        if (Repository.lowFuelNoticeDay == today) return
+        val km = Analytics.predictNextRefuel(records, capacity)?.km
+        binding.lowFuelBannerText.text = if (km != null)
+            "⚠ 油量仅剩约 ${pct.toInt()}%，预计还能跑 $km 公里，建议尽快加油"
+        else "⚠ 油量仅剩约 ${pct.toInt()}%，建议尽快加油"
+        binding.lowFuelBanner.visibility = View.VISIBLE
+    }
+
+    /** I12：切换到「星迹」页 */
+    fun switchToHistory() {
+        binding.bottomNav.selectedItemId = R.id.nav_history
+    }
+
+    /** I8：切换到「记录」页（供记录页一键定位到自身） */
+    fun selectTab(itemId: Int) {
+        binding.bottomNav.selectedItemId = itemId
     }
 
     override fun onPause() {
@@ -141,12 +185,9 @@ class MainActivity : AppCompatActivity() {
         pendingInfo = info
         binding.updateBanner.visibility = View.VISIBLE
         binding.skipVersionBtn.visibility = if (fromStartup) View.VISIBLE else View.GONE
-        // C1：更新说明可能是一整段 CHANGELOG，截断避免撑爆横幅
-        val note = info.notes.takeIf { it.isNotBlank() }?.let {
-            val trimmed = it.replace('\r', ' ').replace('\n', ' ')
-            val short = if (trimmed.length > 80) trimmed.take(80) + "…" else trimmed
-            "\n$short"
-        }.orEmpty()
+        // I14：只显示当前版本那一段说明（从整篇 CHANGELOG 中截取），不再截头去尾显示一堆标题
+        val note = UpdateManager.extractVersionNotes(info.notes, info.version)
+            .takeIf { it.isNotBlank() }?.let { "\n$it" }.orEmpty()
         binding.updateBannerText.text = "发现新版本 v${info.version}$note"
     }
 

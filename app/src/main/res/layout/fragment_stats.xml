@@ -46,6 +46,28 @@
             android:textSize="12sp"
             android:visibility="gone" />
 
+        <TextView
+            android:id="@+id/qualityAdviceText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_banner"
+            android:padding="10dp"
+            android:textColor="@color/average"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/anomalyHintText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_banner"
+            android:padding="10dp"
+            android:textColor="@color/poor"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -89,6 +111,18 @@
             <TextView style="@style/LabelText" android:layout_gravity="center_horizontal" android:text="平均每次加油量" android:textSize="12sp" />
             <TextView android:id="@+id/refuelFrequencyText" style="@style/ValueText" android:layout_gravity="center_horizontal" android:layout_marginTop="8dp" android:text="-- 天" />
             <TextView style="@style/LabelText" android:layout_gravity="center_horizontal" android:text="平均加油间隔" android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/nextRefuelText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_banner"
+                android:gravity="center"
+                android:padding="10dp"
+                android:text="🔮 下次加油预测：数据不足"
+                android:textColor="@color/primary"
+                android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

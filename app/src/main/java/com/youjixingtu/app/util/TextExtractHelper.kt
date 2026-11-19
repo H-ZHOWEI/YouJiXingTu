@@ -57,19 +57,23 @@ object TextExtractHelper {
             }
         }
 
+        // I7：油品词表扩展，兼容 89/92/95/98 汽油、0/-10 柴油、乙醇汽油及“油品/品名/型号”标签
         val typePatterns = listOf(
-            Regex("(92号汽油|95号汽油|98号汽油|0号柴油)"),
-            Regex("油品[:：]\\s*([^\\n]+)")
+            Regex("(89号汽油|92号汽油|95号汽油|98号汽油|0号柴油|-10号柴油|10号柴油|乙醇汽油|汽油|柴油)", RegexOption.IGNORE_CASE),
+            Regex("(?:油品|品名|型号|油品名称)[:：]?\\s*([^\\n]{1,12})")
         )
         var type: String? = null
         for (pattern in typePatterns) {
             val match = pattern.find(text) ?: continue
             val raw = match.groupValues.getOrNull(1)?.takeIf { it.isNotBlank() } ?: match.value
             type = when {
+                raw.contains("89") -> "89"
                 raw.contains("92") -> "92"
                 raw.contains("95") -> "95"
                 raw.contains("98") -> "98"
-                raw.contains("0") || raw.contains("柴油") -> "0"
+                raw.contains("乙醇") -> "92" // 乙醇汽油默认按 92 处理
+                raw.contains("柴油") || raw.contains("-10") || raw.contains("0号") || raw.trim() == "0" -> "0"
+                raw.contains("汽油") -> "92" // 只识别到“汽油”时给最常见默认值，用户可改
                 else -> raw.trim()
             }
             break

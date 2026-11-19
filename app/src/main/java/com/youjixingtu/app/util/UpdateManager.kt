@@ -162,6 +162,27 @@ object UpdateManager {
         return 0
     }
 
+    /**
+     * I14：从整篇 CHANGELOG 中只截取指定版本那一段（## vX.Y 到下一个 ## 之间），
+     * 避免把整份更新记录塞进更新横幅。
+     */
+    fun extractVersionNotes(notes: String, version: String): String {
+        if (notes.isBlank()) return ""
+        val lines = notes.lineSequence().map { it.trimEnd() }.toList()
+        val headerRegex = Regex("^#{1,4}\\s*v?${Regex.escape(version)}(?:\\s|$)", RegexOption.IGNORE_CASE)
+        val start = lines.indexOfFirst { headerRegex.matches(it) }
+        if (start < 0) return ""
+        val body = mutableListOf<String>()
+        for (i in start + 1 until lines.size) {
+            val line = lines[i]
+            if (Regex("^#{1,2}\\s").matches(line.trimStart())) break
+            body.add(line)
+        }
+        return body.joinToString("\n").trim()
+            .lines().map { it.trim() }.filter { it.isNotBlank() }
+            .take(12).joinToString(" ")
+    }
+
     private fun candidateUrls(original: String): List<String> = listOf(
         // 国内可达性更好的镜像优先，直连放后面，减少卡在 GitHub 直连的概率
         "https://ghproxy.net/$original",

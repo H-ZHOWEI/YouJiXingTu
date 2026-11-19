@@ -508,6 +508,146 @@ object Analytics {
         return records
     }
 
+    // ==================== v1.12 智能化推断 ====================
+
+    /** I1：按加油量占油箱容量的比例推断油箱状态；无法可靠判断时返回 null（保持手动） */
+    fun inferTankStatus(liters: Double?, tankCapacity: Int): String? {
+        if (liters == null || liters <= 0 || tankCapacity <= 0) return null
+        val ratio = liters / tankCapacity
+        return when {
+            ratio >= 0.9 -> "full"
+            ratio >= 0.35 -> "partial"
+            else -> null
+        }
+    }
+
+    /** I2：某加油站历史最常用的油品（忽略“已忘记”） */
+    fun stationFuelType(records: List<FuelRecord>, station: String): String? {
+        if (station.isBlank()) return null
+        return records.mapNotNull { r ->
+            val f = r.refuelData
+            if (r.isRefuel && f?.gasStation?.trim() == station.trim() && !f.fuelType.isNullOrBlank()
+                && f.forgottenFields?.fuelType != true
+            ) f.fuelType else null
+        }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+    }
+
+    /** I5/I6：历史平均单价（总金额/总升数，按量加权）；station 为空表示全部加油站 */
+    fun historicalPricePerLiter(records: List<FuelRecord>, station: String? = null): Double? {
+        val pool = records.filter { r ->
+            val f = r.refuelData ?: return@filter false
+            r.isRefuel && (f.fuelCost ?: 0.0) > 0 && (f.fuelLiters ?: 0.0) > 0 &&
+                f.forgottenFields?.fuelCost != true && f.forgottenFields?.fuelLiters != true &&
+                (station.isNullOrBlank() || f.gasStation?.trim() == station.trim())
+        }
+        val liters = pool.sumOf { it.refuelData!!.fuelLiters!! }
+        val cost = pool.sumOf { it.refuelData!!.fuelCost!! }
+        return if (liters > 0 && cost > 0) cost / liters else null
+    }
+
+    /** I3：重复记录检测——同一天已加油，或里程与某条加油记录几乎相同 */
+    fun detectDuplicateHint(
+        records: List<FuelRecord>, date: Date, mileage: Int?, isRefuel: Boolean, excludeId: String? = null
+    ): String? {
+        if (!isRefuel) return null
+        val dayKey = formatDateOnly(date)
+        val sameDay = records.any { r ->
+            r.id != excludeId && r.isRefuel && formatDateOnly(parseDate(r.date)) == dayKey
+        }
+        if (sameDay) return "同一天已经有一条加油记录了，确认不是重复记录？"
+        if (mileage != null) {
+            val near = validMileageRecords(records).any { r ->
+                r.id != excludeId && r.isRefuel && r.mileage != null && kotlin.math.abs(r.mileage!! - mileage) <= 2
+            }
+            if (near) return "有一条加油记录的里程与本次几乎相同（$mileage km），确认不是重复记录？"
+        }
+        return null
+    }
+
+    /** I4：里程量级异常提醒——相对历史最大里程跳变过大（疑似多打一位） */
+    fun mileageAnomalyHint(records: List<FuelRecord>, date: Date, mileage: Int, excludeId: String? = null): String? {
+        val prevMax = maxMileageBeforeDate(records, date, excludeId)
+        if (prevMax <= 0) return null
+        val sorted = validMileageRecords(records).filter { it.id != excludeId }.sortedBy { parseDate(it.date) }
+        val increments = mutableListOf<Int>()
+        for (i in 1 until sorted.size) {
+            val d = (sorted[i].mileage ?: 0) - (sorted[i - 1].mileage ?: 0)
+            if (d > 0) increments.add(d)
+        }
+        val typical = if (increments.isNotEmpty()) increments.sorted()[increments.size / 2] else 0
+        val jump = mileage - prevMax
+        if (jump > maxOf(500, typical * 5)) {
+            return "比上次（$prevMax km）多了 $jump km，平时一次约 $typical km，是不是多打了一位？"
+        }
+        return null
+    }
+
+    data class RefuelPrediction(val message: String, val days: Int?, val km: Int?)
+
+    /** I9：下次加油预测——剩余油量按油耗折算可行驶公里，再按个人加油习惯折算天数 */
+    fun predictNextRefuel(records: List<FuelRecord>, tankCapacity: Int): RefuelPrediction? {
+        val remaining = calculateRemainingFuel(records, tankCapacity) ?: return null
+        val consumption = calculateFuelConsumption(records) ?: return null
+        val km = (remaining / consumption * 100).toInt()
+        val habits = refuelHabits(records)
+        val days = if (habits.avgAmount > 0 && habits.avgIntervalDays > 0)
+            (remaining / habits.avgAmount * habits.avgIntervalDays).toInt() else null
+        val msg = buildString {
+            append("按当前油量约还能行驶 $km 公里")
+            if (days != null) append("，约 $days 天后需要加油")
+        }
+        return RefuelPrediction(msg, days, km)
+    }
+
+    /** I10：手动容量与估算容量偏差过大时提示 */
+    fun capacityConflictHint(manual: Int, estimated: Int): String? {
+        if (estimated <= 0) return null
+        val diff = kotlin.math.abs(manual - estimated).toDouble() / estimated
+        return if (diff > 0.3) "你填的 $manual 升与按记录估算的 $estimated 升相差较大，确认无误？" else null
+    }
+
+    /** I11：单段油耗明显偏离整体平均时提示可能记错 */
+    fun anomalousConsumptionHint(records: List<FuelRecord>): String? {
+        val avg = calculateFuelConsumption(records) ?: return null
+        val valid = validMileageRecords(records).filter {
+            it.isRefuel && it.tankStatus == "full" && (it.refuelData?.fuelLiters ?: 0.0) > 0
+        }.sortedBy { parseDate(it.date) }
+        if (valid.size < 2) return null
+        for (i in 1 until valid.size) {
+            val prev = valid[i - 1]
+            val curr = valid[i]
+            val d = (curr.mileage ?: 0) - (prev.mileage ?: 0)
+            val f = prev.refuelData?.fuelLiters ?: 0.0
+            if (d <= 0 || f <= 0) continue
+            val seg = f / d * 100
+            if (seg > avg * 1.8 || seg < avg * 0.4) {
+                val segTxt = String.format(Locale.getDefault(), "%.1f", seg)
+                val avgTxt = String.format(Locale.getDefault(), "%.1f", avg)
+                return "${formatDateOnly(parseDate(prev.date))} 前后一段油耗约 $segTxt L/100km，明显偏离平均 $avgTxt，可能里程或油量记错了"
+            }
+        }
+        return null
+    }
+
+    /** I12：数据质量的可操作建议 */
+    fun qualityAdvice(records: List<FuelRecord>): String? {
+        val quality = assessDataQuality(records)
+        if (quality == "good") return null
+        val gaps = gapStats(records)
+        return when {
+            quality == "poor" -> "数据里有较多超过 30 天的空白时段，建议到「星迹」补记缺失的加油，或用「清理冗余」整理。"
+            gaps != null -> "检测到 ${gaps.gapCount} 段空白期，可到「星迹」补记或清理冗余记录，统计会更准。"
+            else -> null
+        }
+    }
+
+    /** I15：常用目的地（按使用频次排序），用于输入补全 */
+    fun frequentDestinations(records: List<FuelRecord>, limit: Int = 10): List<String> =
+        records.mapNotNull { it.destination.trim().takeIf { v -> v.isNotBlank() } }
+            .groupingBy { it }.eachCount()
+            .entries.sortedByDescending { it.value }
+            .take(limit).map { it.key }
+
     /** 生成唯一 ID，格式与旧版类似 */
     fun newId(): String =
         "${System.currentTimeMillis()}-${(Math.random() * 1e9).toLong().toString(36)}-${System.nanoTime().toString(36)}"

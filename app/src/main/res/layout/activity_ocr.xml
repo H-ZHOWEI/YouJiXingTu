@@ -54,8 +54,19 @@
             <TextView style="@style/LabelText" android:layout_marginTop="6dp" android:text="金额（元）" />
             <EditText android:id="@+id/ocrCostInput" android:layout_width="match_parent" android:layout_height="40dp" android:background="@drawable/bg_field" android:hint="未识别" android:inputType="numberDecimal" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="14sp" />
 
-            <TextView style="@style/LabelText" android:layout_marginTop="6dp" android:text="油品类型（92/95/98/0）" />
+            <TextView style="@style/LabelText" android:layout_marginTop="6dp" android:text="油品类型（89/92/95/98/0/-10）" />
             <EditText android:id="@+id/ocrTypeInput" android:layout_width="match_parent" android:layout_height="40dp" android:background="@drawable/bg_field" android:hint="未识别" android:inputType="text" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/ocrSmartHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_banner"
+                android:padding="8dp"
+                android:textColor="@color/average"
+                android:textSize="12sp"
+                android:visibility="gone" />
         </LinearLayout>
 
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:orientation="horizontal">

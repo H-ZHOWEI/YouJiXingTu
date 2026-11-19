@@ -10,6 +10,8 @@ import androidx.exifinterface.media.ExifInterface
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import com.youjixingtu.app.core.Analytics
+import com.youjixingtu.app.data.Repository
 import com.youjixingtu.app.databinding.ActivityOcrBinding
 import com.youjixingtu.app.util.TextExtractHelper
 import java.io.File
@@ -117,6 +119,50 @@ class OcrActivity : AppCompatActivity() {
         if (binding.ocrLitersInput.text.isNullOrBlank()) result.fuelLiters?.let { binding.ocrLitersInput.setText(it.toString()) }
         if (binding.ocrCostInput.text.isNullOrBlank()) result.fuelCost?.let { binding.ocrCostInput.setText(it.toString()) }
         if (binding.ocrTypeInput.text.isNullOrBlank()) result.fuelType?.let { binding.ocrTypeInput.setText(it) }
+
+        val hints = mutableListOf<String>()
+        val station = binding.ocrStationInput.text?.toString()?.trim().orEmpty()
+        val records = Repository.loadRecords()
+
+        // I6：缺一项时用历史单价反推补全（标注“估算”）
+        val histPrice = Analytics.historicalPricePerLiter(records, station.ifBlank { null })
+            ?: Analytics.historicalPricePerLiter(records)
+        if (histPrice != null && histPrice > 0) {
+            val litersTxt = binding.ocrLitersInput.text?.toString()?.trim().orEmpty()
+            val costTxt = binding.ocrCostInput.text?.toString()?.trim().orEmpty()
+            if (litersTxt.isBlank() && costTxt.toDoubleOrNull() != null && result.fuelLiters == null) {
+                val est = costTxt.toDouble() / histPrice
+                binding.ocrLitersInput.setText(String.format(java.util.Locale.getDefault(), "%.2f", est))
+                hints.add("加油量按历史单价 $histPrice 元/升估算，请核对")
+            } else if (costTxt.isBlank() && litersTxt.toDoubleOrNull() != null && result.fuelCost == null) {
+                val est = litersTxt.toDouble() * histPrice
+                binding.ocrCostInput.setText(String.format(java.util.Locale.getDefault(), "%.2f", est))
+                hints.add("金额按历史单价 $histPrice 元/升估算，请核对")
+            }
+        }
+
+        // I5：单价交叉校验——识别出的金额/升数算出的单价与历史偏差过大时提醒
+        val liters = binding.ocrLitersInput.text?.toString()?.toDoubleOrNull()
+        val cost = binding.ocrCostInput.text?.toString()?.toDoubleOrNull()
+        if (liters != null && liters > 0 && cost != null && cost > 0 && histPrice != null && histPrice > 0) {
+            val price = cost / liters
+            val deviation = kotlin.math.abs(price - histPrice) / histPrice
+            val priceTxt = String.format(java.util.Locale.getDefault(), "%.2f", price)
+            val histTxt = String.format(java.util.Locale.getDefault(), "%.2f", histPrice)
+            if (deviation > 0.3) {
+                hints.add("⚠ 本次单价约 $priceTxt 元/升，与历史 $histTxt 元/升差 ${(deviation * 100).toInt()}%，请仔细核对金额和升数")
+            } else {
+                hints.add("单价约 $priceTxt 元/升，与历史接近 ✓")
+            }
+        }
+
+        if (hints.isNotEmpty()) {
+            binding.ocrSmartHint.visibility = android.view.View.VISIBLE
+            binding.ocrSmartHint.text = hints.joinToString("\n")
+        } else {
+            binding.ocrSmartHint.visibility = android.view.View.GONE
+        }
+
         if (showToast) {
             val count = listOf(result.gasStation, result.fuelLiters, result.fuelCost, result.fuelType).count { it != null }
             toast(if (count > 0) "已提取 $count 项信息，请核对" else "未提取到信息，请检查文本或手动填写")

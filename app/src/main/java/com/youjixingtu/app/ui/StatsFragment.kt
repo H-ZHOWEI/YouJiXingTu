@@ -84,6 +84,26 @@ class StatsFragment : Fragment() {
         val habits = Analytics.refuelHabits(records)
         binding.avgRefuelAmountText.text = "${formatNumber(habits.avgAmount, 1)} 升"
         binding.refuelFrequencyText.text = "${formatNumber(habits.avgIntervalDays, 1)} 天"
+
+        // I9：下次加油预测
+        val capacity = Repository.tankCapacity.takeIf { it in 20..200 }
+            ?: Analytics.estimateTankCapacity(records)
+        val prediction = Analytics.predictNextRefuel(records, capacity)
+        binding.nextRefuelText.text = prediction?.let { "🔮 下次加油预测：${it.message}" }
+            ?: "🔮 下次加油预测：数据不足，多记几次加油后可预测"
+
+        // I11：异常油耗提示
+        val anomaly = Analytics.anomalousConsumptionHint(records)
+        binding.anomalyHintText.visibility = if (anomaly.isNullOrBlank()) android.view.View.GONE else android.view.View.VISIBLE
+        binding.anomalyHintText.text = anomaly.orEmpty()
+
+        // I12：数据质量可操作建议（点击跳到星迹页补记/清理）
+        val advice = Analytics.qualityAdvice(records)
+        binding.qualityAdviceText.visibility = if (advice.isNullOrBlank()) android.view.View.GONE else android.view.View.VISIBLE
+        binding.qualityAdviceText.text = if (advice.isNullOrBlank()) "" else "$advice 👉 点此去处理"
+        binding.qualityAdviceText.setOnClickListener {
+            (requireActivity() as? MainActivity)?.switchToHistory()
+        }
     }
 
     private fun selectPeriod(value: String) {

@@ -6,6 +6,8 @@ import android.app.TimePickerDialog
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.CompoundButton
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -90,6 +92,10 @@ class EditRecordActivity : AppCompatActivity() {
 
         if (record.tankStatus == "partial") binding.editTankPartialRadio.isChecked = true
 
+        // I15：常用目的地补全
+        val dest = binding.editDestinationInput as AutoCompleteTextView
+        dest.setAdapter(ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, Analytics.frequentDestinations(records)))
+
         setupListeners()
     }
 
@@ -122,6 +128,27 @@ class EditRecordActivity : AppCompatActivity() {
             // A5：仅目的地为空时带入站名，不覆盖用户已填内容
             if (binding.editRefuelCheck.isChecked && binding.editDestinationInput.text.isNullOrBlank()) {
                 binding.editDestinationInput.setText(text)
+            }
+            // I2：该站历史常用油品自动带出（当前为默认项时）
+            val station = text.toString().trim()
+            if (station.isNotBlank()) {
+                Analytics.stationFuelType(records, station)?.let { type ->
+                    val pos = fuelTypePosition(this@EditRecordActivity, type)
+                    if (pos > 0 && binding.editFuelTypeSpinner.selectedItemPosition == 0) {
+                        binding.editFuelTypeSpinner.setSelection(pos)
+                    }
+                }
+            }
+        })
+        // I1：按加油量推断是否加满
+        binding.editFuelLitersInput.addTextChangedListener(simpleTextWatcher {
+            val liters = binding.editFuelLitersInput.doubleOrNull()
+            val capacity = Repository.tankCapacity.takeIf { it in 20..200 }
+                ?: Analytics.estimateTankCapacity(records)
+            when (Analytics.inferTankStatus(liters, capacity)) {
+                "full" -> binding.editTankFullRadio.isChecked = true
+                "partial" -> binding.editTankPartialRadio.isChecked = true
+                else -> {}
             }
         })
         // A4：移除金额自动判满逻辑，油箱状态完全手动
@@ -209,6 +236,38 @@ class EditRecordActivity : AppCompatActivity() {
         val station = binding.editGasStationInput.text.toString().trim()
         val liters = binding.editFuelLitersInput.doubleOrNull()
         val cost = binding.editFuelCostInput.doubleOrNull()
+
+        // I3：重复记录检测
+        Analytics.detectDuplicateHint(records, currentDate, mileage, refuel, recordId)?.let { hint ->
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("可能是重复记录")
+                .setMessage("$hint\n\n如果确实要记录，请点「仍然保存」。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("仍然保存") { _, _ -> persistEdit(index, original, mileage, destination, refuel, station, liters, cost) }
+                .show()
+            return
+        }
+        // I4：里程量级异常提醒
+        if (mileage != null) {
+            Analytics.mileageAnomalyHint(records, currentDate, mileage, recordId)?.let { hint ->
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("请确认公里数")
+                    .setMessage("$hint\n\n确认无误请点「继续保存」。")
+                    .setNegativeButton("返回修改", null)
+                    .setPositiveButton("继续保存") { _, _ -> persistEdit(index, original, mileage, destination, refuel, station, liters, cost) }
+                    .show()
+                return
+            }
+        }
+        persistEdit(index, original, mileage, destination, refuel, station, liters, cost)
+    }
+
+    /** 真正落盘（从 save() 抽出，供智能提示确认后复用） */
+    private fun persistEdit(
+        index: Int, original: com.youjixingtu.app.model.FuelRecord,
+        mileage: Int?, destination: String, refuel: Boolean, station: String,
+        liters: Double?, cost: Double?
+    ) {
         val fuelType = fuelTypeValue(this, binding.editFuelTypeSpinner.selectedItemPosition)
         val forgotStation = binding.editForgotGasStationCheck.isChecked
         val forgotLiters = binding.editForgotFuelLitersCheck.isChecked
@@ -242,7 +301,7 @@ class EditRecordActivity : AppCompatActivity() {
             destination = destination,
             isRefuel = refuel,
             tankStatus = if (binding.editTankFullRadio.isChecked) "full" else "partial",
-            forgottenFields = ForgottenFields(mileage = forgotMileage),
+            forgottenFields = ForgottenFields(mileage = binding.editForgotMileageCheck.isChecked),
             refuelData = if (hasFuelData) RefuelData(
                 gasStation = if (forgotStation) null else station.ifBlank { null },
                 fuelLiters = if (forgotLiters) null else liters,

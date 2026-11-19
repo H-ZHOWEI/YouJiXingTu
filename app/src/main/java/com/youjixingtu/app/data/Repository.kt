@@ -26,6 +26,7 @@ object Repository {
     const val KEY_LOC_LAT = "lastLocLat"
     const val KEY_LOC_LNG = "lastLocLng"
     const val KEY_LOC_TIME = "lastLocTime"
+    const val KEY_LOW_FUEL_NOTICE_DAY = "lowFuelNoticeDay"
 
     private var appContext: Context? = null
     private val gson: Gson = GsonBuilder().serializeNulls().create()
@@ -170,6 +171,11 @@ object Repository {
                     .putLong(KEY_LOC_TIME, value.third).apply()
             }
         }
+
+    /** I8：低油量当天提醒去重，避免每次进入页面都弹 */
+    var lowFuelNoticeDay: String
+        get() = prefs.getString(KEY_LOW_FUEL_NOTICE_DAY, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_LOW_FUEL_NOTICE_DAY, value).apply() }
 
     fun loadPhotos(): MutableList<CameraPhoto> {
         val stored = prefs.getString(KEY_CAMERA_PHOTOS, null)
