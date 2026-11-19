@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.google.gson.Gson
@@ -16,6 +17,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
 /**
@@ -57,8 +59,12 @@ object UpdateManager {
     )
 
     private val gson = Gson()
+    /** 下载进度 0f..1f；-1f 表示失败。单调不回退。 */
     private val _progress = MutableStateFlow(0f)
     val progress: StateFlow<Float> = _progress
+    /** 下载阶段文字（线路 x/4、正在校验等），供 UI 显示，避免进度回跳时用户困惑 */
+    private val _status = MutableStateFlow("")
+    val status: StateFlow<String> = _status
 
     private val checkClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -73,10 +79,11 @@ object UpdateManager {
 
     private val downloadClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
+            // 下载走长读超时，但不用 120s（卡住时要能尽快切线路）
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
+            .retryOnConnectionFailure(false) // 关闭 OkHttp 内部重试，改用外层可控的断点续传
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
@@ -156,70 +163,147 @@ object UpdateManager {
     }
 
     private fun candidateUrls(original: String): List<String> = listOf(
-        original,
+        // 国内可达性更好的镜像优先，直连放后面，减少卡在 GitHub 直连的概率
         "https://ghproxy.net/$original",
+        "https://gh-proxy.com/$original",
         "https://mirror.ghproxy.com/$original",
+        original,
         "https://gh.api.99988866.xyz/$original"
     ).distinct()
 
+    private enum class DlResult { SUCCESS, PARTIAL, NO_PROGRESS, FAIL }
+
+    /** APK 是 ZIP 包，文件头必须是 PK 魔数，用来挡住代理返回的 HTML 错误页 */
+    private fun isApk(file: File): Boolean = try {
+        file.inputStream().use { s -> s.read() == 'P'.code && s.read() == 'K'.code }
+    } catch (_: Exception) {
+        false
+    }
+
+    /**
+     * 断点续传下载：每条线路失败后从已下载字节继续，进度单调不回退。
+     * 相比旧实现（每条线路从头下、分母取 contentLength）解决了：
+     *  1) 切线路时百分比回跳（2%→23%→0%）；
+     *  2) 代理/gzip 导致 contentLength 与实际字节不符、进度卡死；
+     *  3) 单线路卡住时 8 次尝试 × 120s 读超时，长时间无响应。
+     */
     suspend fun download(context: Context, info: Info): File? = withContext(Dispatchers.IO) {
+        _progress.value = 0f
+        _status.value = "准备下载…"
         try {
-            _progress.value = 0f
             val dir = File(context.cacheDir, "update").apply { mkdirs() }
             val target = File(dir, "YouJiXingTu-v${info.version}-release.apk")
-            if (target.exists() && info.sizeBytes > 0 && target.length() == info.sizeBytes) {
+
+            // 已完整下载且校验通过 → 直接复用，避免重复下载
+            if (target.exists() && info.sizeBytes > 0 &&
+                target.length() == info.sizeBytes && isApk(target)
+            ) {
                 _progress.value = 1f
+                _status.value = "下载完成"
                 return@withContext target
             }
-            for (url in candidateUrls(info.apkUrl)) {
-                repeat(2) {
-                    try {
-                        if (doDownload(url, target, info.sizeBytes)) {
-                            _progress.value = 1f
-                            return@withContext target
-                        }
-                    } catch (_: Exception) {
-                    }
+
+            val urls = candidateUrls(info.apkUrl)
+            val maxAttempts = urls.size * 2              // 每条线路最多 2 次
+            val deadline = SystemClock.elapsedRealtime() + 5 * 60 * 1000L // 整体 5 分钟硬上限
+            var attempt = 0
+
+            while (attempt < maxAttempts && SystemClock.elapsedRealtime() < deadline) {
+                val url = urls[attempt % urls.size]
+                val lineNo = (attempt % urls.size) + 1
+                val isRetry = attempt >= urls.size
+                attempt++
+                _status.value = "线路 $lineNo/${urls.size}${if (isRetry) " · 重试" else ""}"
+                val result = try {
+                    doDownload(url, target, info.sizeBytes)
+                } catch (_: Exception) {
+                    DlResult.FAIL
+                }
+                if (result == DlResult.SUCCESS) {
+                    _progress.value = 1f
+                    _status.value = "下载完成"
+                    return@withContext target
                 }
             }
+
             _progress.value = -1f
+            _status.value = "下载失败"
             null
         } catch (_: Exception) {
             _progress.value = -1f
+            _status.value = "下载失败"
             null
         }
     }
 
-    private fun doDownload(url: String, target: File, expectedSize: Long): Boolean {
-        val request = Request.Builder().url(url).get().build()
-        val response = downloadClient.newCall(request).execute()
-        if (!response.isSuccessful) {
-            response.close()
-            return false
+    /** 单次线路下载，支持 HTTP Range 断点续传；进度分母用 Release 的可信 size */
+    private fun doDownload(url: String, target: File, expectedSize: Long): DlResult {
+        // 已有长度不小于期望大小却没通过校验 → 残次/错误内容，删掉从头来
+        if (expectedSize > 0 && target.exists() && target.length() >= expectedSize) {
+            try { target.delete() } catch (_: Exception) { }
         }
-        val total = response.body?.contentLength()?.takeIf { it > 0 } ?: expectedSize
-        var ok = false
+
+        val existing = if (target.exists()) target.length() else 0L
+        val request = Request.Builder()
+            .url(url)
+            .header("Accept-Encoding", "identity") // 禁 gzip：保证读到的字节长度与 contentLength 一致
+            .header("User-Agent", "YouJiXingTu-Updater")
+            .apply { if (existing > 0) header("Range", "bytes=$existing-") }
+            .get()
+            .build()
+
+        val response = downloadClient.newCall(request).execute()
+        if (!response.isSuccessful && response.code != 206) {
+            response.close()
+            return DlResult.FAIL
+        }
+        val body = response.body ?: run { response.close(); return DlResult.FAIL }
+
+        // 206 = 服务器接受 Range，续传；200 = 忽略 Range，从头写
+        val append = response.code == 206 && existing > 0
+        val base = if (append) existing else 0L
+        if (!append && target.exists()) {
+            try { target.delete() } catch (_: Exception) { }
+        }
+
+        val total = if (expectedSize > 0) expectedSize else base + body.contentLength()
+        var done = base
+        var readThisRound = 0L
+
         try {
-            response.body?.byteStream()?.use { input ->
-                target.outputStream().use { out ->
+            body.byteStream().use { input ->
+                FileOutputStream(target, append).use { out ->
                     val buffer = ByteArray(64 * 1024)
                     var read: Int
-                    var done = 0L
                     while (input.read(buffer).also { read = it } > 0) {
                         out.write(buffer, 0, read)
                         done += read
-                        if (total > 0) _progress.value = (done.toFloat() / total).coerceIn(0f, 1f)
+                        readThisRound += read
+                        if (total > 0) {
+                            val p = (done.toFloat() / total).coerceIn(0f, 1f)
+                            // 单调钳制：切线路/重试时进度绝不回退，避免百分比乱跳
+                            if (p > _progress.value) _progress.value = p
+                        }
                     }
                     out.flush()
                 }
             }
-            ok = target.length() >= 1024L && (expectedSize <= 0L || target.length() == expectedSize)
         } catch (_: Exception) {
-            ok = false
+            return if (readThisRound > 0L) DlResult.PARTIAL else DlResult.NO_PROGRESS
         } finally {
-            if (!ok) try { target.delete() } catch (_: Exception) { }
+            response.close()
         }
-        return ok
+
+        if (readThisRound <= 0L && base <= 0L) return DlResult.NO_PROGRESS
+
+        val finalSize = target.length()
+        // 没下满 → 记为部分进度，下一条线路从断点续传
+        if (expectedSize > 0 && finalSize < expectedSize) return DlResult.PARTIAL
+        if (finalSize < 1024L || !isApk(target)) {
+            try { target.delete() } catch (_: Exception) { }
+            return DlResult.FAIL
+        }
+        return DlResult.SUCCESS
     }
 
     fun canInstall(context: Context): Boolean =

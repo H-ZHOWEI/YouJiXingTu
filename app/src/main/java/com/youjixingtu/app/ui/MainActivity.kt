@@ -8,7 +8,6 @@ import androidx.lifecycle.lifecycleScope
 import com.youjixingtu.app.R
 import com.youjixingtu.app.databinding.ActivityMainBinding
 import com.youjixingtu.app.util.UpdateManager
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -20,6 +19,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var historyFragment: HistoryFragment
     private lateinit var currentFragment: Fragment
     private var isChecking = false
+    private var isDownloading = false
     private var pendingInfo: UpdateManager.Info? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -151,28 +151,54 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startUpdate(info: UpdateManager.Info) {
+        if (isDownloading) {
+            toast("正在下载中，请稍候")
+            return
+        }
         if (!UpdateManager.canInstall(this)) {
             toast("请先允许安装未知应用，然后再次点击更新", long = true)
             UpdateManager.openInstallPermission(this)
             return
         }
-        binding.updateBannerText.text = "正在下载 v${info.version}… 0%"
+        isDownloading = true
+        binding.updateNowBtn.isEnabled = false
+        binding.updateNowBtn.text = "下载中…"
+        binding.updateBannerText.text = "正在下载 v${info.version} · 准备中… 0%"
         lifecycleScope.launch {
-            var progressJob: Job? = launch {
+            var shownPercent = 0
+            fun render() {
+                val s = UpdateManager.status.value
+                binding.updateBannerText.text =
+                    "正在下载 v${info.version}" + (if (s.isNotBlank()) " · $s" else "") + " · ${shownPercent}%"
+            }
+            val progressJob = launch {
                 UpdateManager.progress.collect { p ->
                     if (p >= 0f) {
-                        binding.updateBannerText.text = "正在下载 v${info.version}… ${(p * 100).toInt()}%"
+                        val percent = (p * 100).toInt()
+                        // UI 层再钳制一次：进度只增不减，杜绝百分比回跳
+                        if (percent > shownPercent) shownPercent = percent
+                        render()
                     }
                 }
             }
+            val statusJob = launch {
+                UpdateManager.status.collect { s ->
+                    if (s.isNotBlank() && UpdateManager.progress.value >= 0f) render()
+                }
+            }
             val apk = UpdateManager.download(this@MainActivity, info)
-            progressJob?.cancel()
-            progressJob = null
+            progressJob.cancel()
+            statusJob.cancel()
+            isDownloading = false
+            binding.updateNowBtn.isEnabled = true
             if (apk == null) {
-                binding.updateBannerText.text = "下载失败，请检查网络后重试"
-                toast("下载失败，请重试")
+                // 失败后保留横幅与按钮，用户可直接点「重新下载」续传，不用重新检查更新
+                binding.updateBannerText.text = "下载失败：网络不稳定，可点「重新下载」继续（已下载部分会保留）"
+                binding.updateNowBtn.text = "重新下载"
+                toast("下载失败，请重试", long = true)
             } else {
                 binding.updateBannerText.text = "下载完成，正在打开安装界面…"
+                binding.updateNowBtn.text = "立即更新"
                 if (!UpdateManager.install(this@MainActivity, apk)) {
                     toast("无法拉起安装，请检查安装权限")
                 }
