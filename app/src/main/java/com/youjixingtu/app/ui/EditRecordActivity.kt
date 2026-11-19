@@ -87,6 +87,16 @@ class EditRecordActivity : AppCompatActivity() {
 
         binding.editRefuelCheck.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
             binding.editFuelDetailsLayout.show(checked)
+            if (checked) {
+                val lastStation = Repository.lastGasStation
+                if (binding.editGasStationInput.text?.isNotBlank() != true && lastStation.isNotBlank()) {
+                    binding.editGasStationInput.setText(lastStation)
+                    toast("已填入最近加油站：$lastStation，可修改")
+                }
+                if (binding.editDestinationInput.text?.isBlank() == true && binding.editGasStationInput.text?.isNotBlank() == true) {
+                    binding.editDestinationInput.setText(binding.editGasStationInput.text.toString())
+                }
+            }
         }
         binding.editGasStationInput.addTextChangedListener(simpleTextWatcher { text ->
             if (binding.editRefuelCheck.isChecked) binding.editDestinationInput.setText(text)
@@ -221,6 +231,7 @@ class EditRecordActivity : AppCompatActivity() {
             toast("保存失败，请重试")
             return
         }
+        if (!forgotStation && station.isNotBlank()) Repository.lastGasStation = station
         toast("星迹记录修改成功！")
         setResult(Activity.RESULT_OK)
         finish()

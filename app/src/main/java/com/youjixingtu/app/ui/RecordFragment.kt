@@ -137,8 +137,16 @@ class RecordFragment : Fragment() {
 
         binding.refuelCheck.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
             binding.fuelDetailsLayout.show(checked)
-            if (checked && binding.gasStationInput.text?.isNotBlank() == true) {
-                binding.destinationInput.setText(binding.gasStationInput.text.toString())
+            if (checked) {
+                // 勾选「本次加油了」：优先用最近加油站自动填充（用户已填则不覆盖）
+                val lastStation = Repository.lastGasStation
+                if (binding.gasStationInput.text?.isNotBlank() != true && lastStation.isNotBlank()) {
+                    binding.gasStationInput.setText(lastStation)
+                    requireContext().toast("已填入最近加油站：$lastStation，可修改")
+                }
+                if (binding.destinationInput.text?.isBlank() == true && binding.gasStationInput.text?.isNotBlank() == true) {
+                    binding.destinationInput.setText(binding.gasStationInput.text.toString())
+                }
             }
             updateEstimateCard()
         }
@@ -324,6 +332,8 @@ class RecordFragment : Fragment() {
             requireContext().toast("保存失败，请检查存储空间或清理冗余记录")
             return
         }
+        // 记住本次加油站，供下次勾选「本次加油了」时自动填充
+        if (!forgotStation && station.isNotBlank()) Repository.lastGasStation = station
         refresh()
         resetForm()
         requireContext().toast("星迹记录成功！当前共有 ${records.size} 条记录")

@@ -18,6 +18,7 @@ object Repository {
     const val KEY_BACKUP = "fuelRecords_backup"
     const val KEY_TANK_CAPACITY = "tankCapacity"
     const val KEY_LAST_FUEL_TYPE = "lastFuelType"
+    const val KEY_LAST_GAS_STATION = "lastGasStation"
     const val KEY_CAMERA_PHOTOS = "cameraPhotos"
 
     private var appContext: Context? = null
@@ -86,6 +87,20 @@ object Repository {
     var lastFuelType: String
         get() = prefs.getString(KEY_LAST_FUEL_TYPE, "") ?: ""
         set(value) { prefs.edit().putString(KEY_LAST_FUEL_TYPE, value).apply() }
+
+    /** 最近一次加油的加油站名称；未记录时从最新有站的记录派生 */
+    var lastGasStation: String
+        get() {
+            val saved = prefs.getString(KEY_LAST_GAS_STATION, "") ?: ""
+            if (saved.isNotBlank()) return saved
+            return loadRecords()
+                .sortedByDescending { it.timestamp }
+                .firstOrNull { it.refuelData?.gasStation?.isNotBlank() == true }
+                ?.refuelData?.gasStation ?: ""
+        }
+        set(value) {
+            if (value.isNotBlank()) prefs.edit().putString(KEY_LAST_GAS_STATION, value).apply()
+        }
 
     fun loadPhotos(): MutableList<CameraPhoto> {
         val raw = prefs.getString(KEY_CAMERA_PHOTOS, null) ?: return mutableListOf()

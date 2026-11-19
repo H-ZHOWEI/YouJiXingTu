@@ -11,7 +11,7 @@
         android:padding="10dp">
 
         <TextView style="@style/CardTitle" android:text="🔍 提取小票信息" />
-        <TextView style="@style/LabelText" android:layout_marginTop="4dp" android:text="旧版使用模拟识别；这里可手动修改文本后再提取" android:textSize="12sp" />
+        <TextView style="@style/LabelText" android:layout_marginTop="4dp" android:text="正在自动识别小票文字，可手动修改后重新提取" android:textSize="12sp" />
 
         <ImageView
             android:id="@+id/ocrPreview"
