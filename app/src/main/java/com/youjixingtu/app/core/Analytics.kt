@@ -128,39 +128,46 @@ object Analytics {
         return kotlin.math.round(estimated).toInt().coerceIn(30, 150)
     }
 
-    /** 当前油箱剩余油量 */
+    /**
+     * 当前油箱剩余油量。
+     * 以最近一次「加满」为起点，此刻油箱视为满箱（=tankCapacity，而不是那次加了多少升）；
+     * 再按时间正序往后逐段推算：行驶扣油、加油补油，全程钳制在 [0, 油箱容量]。
+     * 这样加满之后的中途加油不会被丢弃，剩余油量也不会轻易变成 0。
+     */
     fun calculateRemainingFuel(records: List<FuelRecord>, tankCapacity: Int): Double? {
         if (records.isEmpty()) return null
-        val sorted = records.sortedByDescending { parseDate(it.date) }
-        var totalFuelAdded = 0.0
-        var totalDistanceAfterRefuel = 0.0
-        var foundFull = false
+        val chronological = records.sortedBy { parseDate(it.date) }
 
-        for (i in sorted.indices) {
-            val r = sorted[i]
-            val liters = r.refuelData?.fuelLiters
-            if (r.isRefuel && r.tankStatus == "full" && liters != null && liters > 0) {
-                totalFuelAdded = liters
-                foundFull = true
-                break
-            }
-            if (r.isRefuel && liters != null) totalFuelAdded += liters
-
-            if (i > 0) {
-                val older = sorted[i - 1]
-                if (!r.mileageForgotten && !older.mileageForgotten &&
-                    r.mileage != null && older.mileage != null
-                ) {
-                    val distance = older.mileage!! - r.mileage!!
-                    if (distance > 0) totalDistanceAfterRefuel += distance
-                }
-            }
+        // 最近一次加满（时间正序里最后一个满足条件的）
+        val fullIndex = chronological.indexOfLast {
+            it.isRefuel && it.tankStatus == "full" && (it.refuelData?.fuelLiters ?: 0.0) > 0
         }
-        if (!foundFull && totalFuelAdded == 0.0) return null
+        // 从未记录过加满：缺少可靠起点，不做臆测，交给上层显示 "--"
+        if (fullIndex < 0) return null
 
         val consumption = calculateFuelConsumption(records) ?: 8.0
-        val fuelConsumed = totalDistanceAfterRefuel * consumption / 100.0
-        return (totalFuelAdded - fuelConsumed).coerceIn(0.0, tankCapacity.toDouble())
+        var fuel = tankCapacity.toDouble() // 加满即满箱
+        for (i in fullIndex + 1 until chronological.size) {
+            val prev = chronological[i - 1]
+            val cur = chronological[i]
+
+            // 这一段行驶的油耗（相邻两条记录里程差，忽略「忘记里程」的记录）
+            if (!prev.mileageForgotten && !cur.mileageForgotten &&
+                prev.mileage != null && cur.mileage != null
+            ) {
+                val distance = cur.mileage!! - prev.mileage!!
+                if (distance > 0) fuel -= distance * consumption / 100.0
+            }
+
+            // 这一条若是加油（含部分加油），把油量加回去
+            if (cur.isRefuel) {
+                val liters = cur.refuelData?.fuelLiters
+                if (liters != null && liters > 0) fuel += liters
+            }
+
+            fuel = fuel.coerceIn(0.0, tankCapacity.toDouble())
+        }
+        return fuel.coerceIn(0.0, tankCapacity.toDouble())
     }
 
     data class DashboardStats(

@@ -26,7 +26,7 @@ app/src/main/java/com/youjixingtu/app/
   YouJiApp.kt              应用入口，初始化仓库、高德隐私合规与 Key 注入（v1.10）
   model/Records.kt         与旧版 JSON 兼容的数据模型
   data/Repository.kt       SharedPreferences 存储/备份/照片
-  core/Analytics.kt        全部统计与校验算法
+  core/Analytics.kt        全部统计与校验算法（剩余油量按加满满箱正序推算，v1.11 修复常年为 0）
   ui/                      MainActivity 与四个页签、编辑页、OCR 页、附近加油站选择页
   util/UpdateManager.kt    版本更新
   util/TextExtractHelper.kt 小票文本提取
