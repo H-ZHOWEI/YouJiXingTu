@@ -133,8 +133,10 @@ class NearbyStationActivity : AppCompatActivity() {
             .show()
     }
 
-    /** 统一注入高德 Key：定位 SDK（静态）与搜索 SDK（单例）都要设，且要在创建客户端前调用 */
+    /** 统一注入高德 Key：先做隐私合规，再设定位 SDK（静态）与搜索 SDK（单例）的 key */
     private fun applyAmapKey(key: String) {
+        // 隐私合规必须早于任何高德接口（含 setApiKey 与构造客户端），否则构造即抛异常
+        com.youjixingtu.app.YouJiApp.applyAmapPrivacy(applicationContext)
         if (key.isBlank()) return
         runCatching { AMapLocationClient.setApiKey(key) }
         runCatching { ServiceSettings.getInstance().setApiKey(key) }
@@ -193,8 +195,15 @@ class NearbyStationActivity : AppCompatActivity() {
                         } else {
                             // 诊断：把错误码带出来，1001/1002 多为 Key 或签名问题
                             val code = location?.errorCode ?: -1
-                            val reason = location?.errorInfo ?: "定位失败"
-                            val keyHint = if (code == 1001 || code == 1002) "（多半是 Key 无效或 SHA1/包名不匹配）" else ""
+                            val rawReason = location?.errorInfo.orEmpty()
+                            val reason = when {
+                                rawReason.contains("INVALID_USER_KEY") -> "Key 无效或与包名/SHA1 不匹配"
+                                rawReason.contains("隐私") || rawReason.contains("Privacy") -> "隐私合规未就绪，请重启 App"
+                                rawReason.length > 80 -> rawReason.take(80) + "…"
+                                rawReason.isBlank() -> "定位失败"
+                                else -> rawReason
+                            }
+                            val keyHint = if (code == 1001 || code == 1002 || rawReason.contains("INVALID_USER_KEY")) "（多半是 Key 无效或 SHA1/包名不匹配）" else ""
                             // C3：定位失败则用上次成功坐标兜底搜索
                             val cached = Repository.lastLocation
                             if (cached != null) {
@@ -216,7 +225,14 @@ class NearbyStationActivity : AppCompatActivity() {
             locationClient?.setLocationOption(option)
             locationClient?.startLocation()
         } catch (e: Exception) {
-            fallbackToHistory("定位不可用：${e.message ?: "未知错误"}，可手动输入")
+            val msg = e.message.orEmpty()
+            val short = when {
+                msg.contains("隐私") || msg.contains("Privacy") -> "高德隐私合规未就绪，请重启 App 后重试"
+                msg.contains("INVALID_USER_KEY") -> "Key 无效或与签名不匹配"
+                msg.length > 100 -> msg.take(100) + "…"
+                else -> msg.ifBlank { "未知错误" }
+            }
+            fallbackToHistory("定位不可用：$short，可手动输入")
         }
     }
 

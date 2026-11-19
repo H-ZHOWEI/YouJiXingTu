@@ -2,6 +2,7 @@ package com.youjixingtu.app
 
 import android.app.Activity
 import android.app.Application
+import android.content.Context
 import android.os.Bundle
 import com.amap.api.location.AMapLocationClient
 import com.amap.api.services.core.ServiceSettings
@@ -12,6 +13,11 @@ class YouJiApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Repository.init(this)
+
+        // 高德 6.x/9.x 强制要求：任何业务接口（含构造客户端）之前必须完成隐私合规声明。
+        // 漏掉这一步时，new AMapLocationClient() 会直接抛异常，表现为「定位不可用 /
+        // 确保调用 updatePrivacyShow、updatePrivacyAgree」。这两步必须先于 setApiKey。
+        applyAmapPrivacy(this)
 
         // 高德要求：Key 必须在任何 SDK 业务初始化/调用之前设置。
         // 放在 Application 起始（比任何 Activity 都早），确保定位和搜索 SDK 首次使用时读到的是有效 key，
@@ -40,5 +46,18 @@ class YouJiApp : Application() {
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
             override fun onActivityDestroyed(activity: Activity) {}
         })
+    }
+
+    companion object {
+        /**
+         * 高德隐私合规：定位与搜索 SDK 各有一套，必须都调用，且早于 key 注入与客户端构造。
+         * 参数含义：隐私条款已包含、已展示、用户已同意（本 App 有隐私政策且用户同意后使用）。
+         */
+        fun applyAmapPrivacy(context: Context) {
+            runCatching { AMapLocationClient.updatePrivacyShow(context, true, true) }
+            runCatching { AMapLocationClient.updatePrivacyAgree(context, true) }
+            runCatching { ServiceSettings.updatePrivacyShow(context, true, true) }
+            runCatching { ServiceSettings.updatePrivacyAgree(context, true) }
+        }
     }
 }

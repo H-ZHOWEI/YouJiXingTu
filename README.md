@@ -23,7 +23,7 @@
 
 ```
 app/src/main/java/com/youjixingtu/app/
-  YouJiApp.kt              应用入口，初始化仓库
+  YouJiApp.kt              应用入口，初始化仓库、高德隐私合规与 Key 注入（v1.10）
   model/Records.kt         与旧版 JSON 兼容的数据模型
   data/Repository.kt       SharedPreferences 存储/备份/照片
   core/Analytics.kt        全部统计与校验算法
@@ -63,7 +63,7 @@ app/src/main/res/          布局、主题、图标、FileProvider 配置
 
 ## 附近加油站（高德 Key）
 
-勾选「本次加油了」会弹出附近加油站选择页，用高德 SDK 定位并搜索 5 公里内的加油站。按合规要求软件不内置任何地图 Key，需自行到 <https://console.amap.com> 免费申请 Android 平台 Key。**v1.7 起推荐在 App 内配置**：进入「选择加油站」页 → 点「设置Key」→ 粘贴 Key → 保存即生效，免改代码、免重装；App 内配置的 Key 优先于 Manifest。也可在编译前把 Key 填入 `app/src/main/AndroidManifest.xml` 的 `com.amap.api.v2.apikey` `android:value`（占位符）。申请时包名填 `com.youjixingtu.app`，调试签名 SHA1 为 `98:52:6E:3A:80:E5:2A:60:E8:59:49:CC:0C:94:E5:9F:98:4C:D0:83`。详细步骤见《操作说明》第八节。不配 Key 不影响其它功能，只是附近加油站列表为空、需手动输入站名。
+勾选「本次加油了」会弹出附近加油站选择页，用高德 SDK 定位并搜索 5 公里内的加油站。按合规要求软件不内置任何地图 Key，需自行到 <https://console.amap.com> 免费申请 Android 平台 Key。**v1.7 起推荐在 App 内配置**：进入「选择加油站」页 → 点「设置Key」→ 粘贴 Key → 保存即生效，免改代码、免重装；App 内配置的 Key 优先于 Manifest。也可在编译前把 Key 填入 `app/src/main/AndroidManifest.xml` 的 `com.amap.api.v2.apikey` `android:value`（留空即可，不要填中文占位文字）。v1.10 补齐了高德定位/搜索 SDK 强制要求的隐私合规声明，修复「填了 Key 仍提示定位不可用」的问题。申请时包名填 `com.youjixingtu.app`，调试签名 SHA1 为 `98:52:6E:3A:80:E5:2A:60:E8:59:49:CC:0C:94:E5:9F:98:4C:D0:83`。详细步骤见《操作说明》第八节。不配 Key 不影响其它功能，只是附近加油站列表为空、需手动输入站名。
 
 ## 数据安全（v1.7）
 
