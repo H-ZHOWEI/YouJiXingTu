@@ -3,6 +3,8 @@ package com.youjixingtu.app
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import com.amap.api.location.AMapLocationClient
+import com.amap.api.services.core.ServiceSettings
 import com.youjixingtu.app.data.Repository
 import com.youjixingtu.app.util.InsetsUtil
 
@@ -10,6 +12,15 @@ class YouJiApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Repository.init(this)
+
+        // 高德要求：Key 必须在任何 SDK 业务初始化/调用之前设置。
+        // 放在 Application 起始（比任何 Activity 都早），确保定位和搜索 SDK 首次使用时读到的是有效 key，
+        // 而不是 Manifest 里的空占位符。App 内设置的 key 保存在 Repository.amapKey。
+        val key = Repository.amapKey
+        if (key.isNotBlank()) {
+            runCatching { AMapLocationClient.setApiKey(key) }
+            runCatching { ServiceSettings.getInstance().setApiKey(key) }
+        }
 
         // 统一给每个页面加系统栏 padding。真机（尤其国产 ROM / Android 15+）会忽略
         // windowOptOutEdgeToEdgeEnforcement，导致内容顶进状态栏、底部按钮被手势条截断。

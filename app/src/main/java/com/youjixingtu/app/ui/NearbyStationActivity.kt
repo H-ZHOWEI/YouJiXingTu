@@ -77,11 +77,7 @@ class NearbyStationActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // B5：App 内配置的 Key 优先，运行时注入定位/搜索 SDK，免重新打包
-        val key = Repository.amapKey
-        if (key.isNotBlank()) {
-            runCatching { AMapLocationClient.setApiKey(key) }
-            runCatching { ServiceSettings.getInstance().setApiKey(key) }
-        }
+        applyAmapKey(Repository.amapKey)
 
         adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, stationList)
         binding.nearbyListView.adapter = adapter
@@ -120,12 +116,13 @@ class NearbyStationActivity : AppCompatActivity() {
             .setPositiveButton("保存并重试") { _, _ ->
                 val key = input.text?.toString()?.trim().orEmpty()
                 Repository.amapKey = key
+                applyAmapKey(key)
+                // 关键：必须销毁并重建 SDK 客户端实例，否则旧实例仍持有旧 key（鉴权一直失败）
+                resetSdkClients()
                 if (key.isBlank()) {
-                    toast("已清除 Key，将使用安装包内置 Key（如有）")
+                    toast("已清除 Key")
                 } else {
-                    runCatching { AMapLocationClient.setApiKey(key) }
-                    runCatching { ServiceSettings.getInstance().setApiKey(key) }
-                    toast("Key 已保存，重新定位…")
+                    toast("Key 已保存，已用新 Key 重新初始化，正在重试…", long = true)
                 }
                 // 重置列表与状态后重走定位
                 settled = false
@@ -134,6 +131,28 @@ class NearbyStationActivity : AppCompatActivity() {
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    /** 统一注入高德 Key：定位 SDK（静态）与搜索 SDK（单例）都要设，且要在创建客户端前调用 */
+    private fun applyAmapKey(key: String) {
+        if (key.isBlank()) return
+        runCatching { AMapLocationClient.setApiKey(key) }
+        runCatching { ServiceSettings.getInstance().setApiKey(key) }
+    }
+
+    /** 销毁并清空 SDK 客户端，确保下次用当前 key 重新构造实例 */
+    private fun resetSdkClients() {
+        try {
+            locationClient?.stopLocation()
+            locationClient?.onDestroy()
+        } catch (_: Exception) {
+        }
+        locationClient = null
+        try {
+            search?.setOnPoiSearchListener(null)
+        } catch (_: Exception) {
+        }
+        search = null
     }
 
     private fun checkPermissionAndLocate() {
@@ -159,9 +178,12 @@ class NearbyStationActivity : AppCompatActivity() {
     }
 
     private fun startLocate() {
-        binding.nearbyStatusText.text = "正在获取当前位置..."
+        val keyReady = Repository.amapKey.isNotBlank()
+        binding.nearbyStatusText.text = if (keyReady) "正在获取当前位置…（Key 已配置）" else "正在获取当前位置…（未配置 Key，点右下角「设置Key」可启用附近搜索）"
         try {
             if (locationClient == null) {
+                // 每次构造客户端前再注入一次 key，确保实例拿到的是最新值
+                applyAmapKey(Repository.amapKey)
                 locationClient = AMapLocationClient(applicationContext).apply {
                     setLocationListener(AMapLocationListener { location ->
                         if (location != null && location.errorCode == 0) {
@@ -169,14 +191,17 @@ class NearbyStationActivity : AppCompatActivity() {
                             Repository.lastLocation = Triple(location.latitude, location.longitude, System.currentTimeMillis())
                             searchNearby(location.latitude, location.longitude)
                         } else {
+                            // 诊断：把错误码带出来，1001/1002 多为 Key 或签名问题
+                            val code = location?.errorCode ?: -1
+                            val reason = location?.errorInfo ?: "定位失败"
+                            val keyHint = if (code == 1001 || code == 1002) "（多半是 Key 无效或 SHA1/包名不匹配）" else ""
                             // C3：定位失败则用上次成功坐标兜底搜索
                             val cached = Repository.lastLocation
-                            val reason = location?.errorInfo ?: "定位失败"
                             if (cached != null) {
-                                binding.nearbyStatusText.text = "定位失败（$reason），试用上次位置搜索…"
+                                binding.nearbyStatusText.text = "定位失败[$code]$keyHint：$reason，试用上次位置搜索…"
                                 searchNearby(cached.first, cached.second)
                             } else {
-                                fallbackToHistory("定位失败：$reason，可手动输入或从历史中选择")
+                                fallbackToHistory("定位失败[$code]$keyHint：$reason，可手动输入或从历史中选择")
                             }
                         }
                     })
@@ -199,6 +224,12 @@ class NearbyStationActivity : AppCompatActivity() {
         binding.nearbyStatusText.text = "正在搜索附近加油站（5 公里）..."
         binding.nearbyProgress.visibility = View.VISIBLE
         try {
+            // 搜索 SDK 走独立单例，构造 PoiSearch 前再注入一次 key
+            applyAmapKey(Repository.amapKey)
+            if (Repository.amapKey.isBlank()) {
+                fallbackToHistory("未配置高德 Key，无法搜索附近加油站；可从历史中选择或手动输入")
+                return
+            }
             val query = PoiSearch.Query("加油站", "汽车服务", "").apply {
                 pageSize = 20
                 pageNum = 0
@@ -228,7 +259,8 @@ class NearbyStationActivity : AppCompatActivity() {
                             }
                             fallbackToHistory("附近没有搜到加油站，可手动输入或从历史中选择")
                         } else {
-                            fallbackToHistory("加油站搜索失败（代码 $rCode），可手动输入或从历史中选择")
+                            val keyHint = if (rCode == 1002 || rCode == 100) "（多半是 Key 无效或未开通搜索服务）" else ""
+                            fallbackToHistory("加油站搜索失败[$rCode]$keyHint，可手动输入或从历史中选择")
                         }
                     }
 
