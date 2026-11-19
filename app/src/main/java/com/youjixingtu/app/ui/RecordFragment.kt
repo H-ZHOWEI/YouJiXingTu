@@ -46,6 +46,10 @@ class RecordFragment : Fragment() {
     private var dateTimeLocked = false
     private var currentDate = Date()
     private var currentPhotoPath: String? = null
+    /** 程序化设置 refuelCheck 时抑制弹页（A1：OCR 自动填充不应触发附近站选择） */
+    private var suppressStationPrompt = false
+    /** 「我忘记了」勾选前的原值，取消勾选时还原（C4） */
+    private val forgotSavedValues = mutableMapOf<Int, String>()
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
     private val dayFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -92,7 +96,8 @@ class RecordFragment : Fragment() {
     /** 将选中的加油站填入「加油站名称」与「去了哪里」 */
     private fun applyPickedStation(station: String) {
         binding.gasStationInput.setText(station)
-        binding.destinationInput.setText(station)
+        // A5：选站后若目的地已填则不覆盖；选站是用户主动行为，这里仍以站名填充空目的地
+        if (binding.destinationInput.text.isNullOrBlank()) binding.destinationInput.setText(station)
         Repository.lastGasStation = station
         requireContext().toast("已填入：$station，可修改", long = true)
     }
@@ -128,7 +133,7 @@ class RecordFragment : Fragment() {
             binding.dateBtn.text = dateFormat.format(currentDate)
         }
         binding.mileageInput.setText(getLastMileage().toString().takeIf { it != "0" } ?: "")
-        binding.fuelTypeSpinner.setSelection(fuelTypePosition(Repository.lastFuelType))
+        binding.fuelTypeSpinner.setSelection(fuelTypePosition(requireContext(), Repository.lastFuelType))
 
         updateEstimateCard()
         updateMiniStats()
@@ -154,8 +159,8 @@ class RecordFragment : Fragment() {
 
         binding.refuelCheck.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
             binding.fuelDetailsLayout.show(checked)
-            if (checked) {
-                // 勾选「本次加油了」：弹出附近加油站（5 公里）让用户选择，选中后自动填入
+            // A1/A3：仅「用户主动勾选 + 加油站仍为空」时弹附近站，避免 OCR 填充/重复勾选反复弹页
+            if (checked && !suppressStationPrompt && binding.gasStationInput.text.isNullOrBlank()) {
                 val intent = Intent(requireContext(), NearbyStationActivity::class.java)
                 nearbyStationLauncher.launch(intent)
             }
@@ -163,25 +168,23 @@ class RecordFragment : Fragment() {
         }
 
         binding.gasStationInput.setOnEditorActionListener { v, _, _ ->
-            if (binding.refuelCheck.isChecked) binding.destinationInput.setText(v.text.toString())
+            // A5：仅当「去了哪里」为空时才带入站名，不覆盖用户已填的目的地
+            if (binding.refuelCheck.isChecked && binding.destinationInput.text.isNullOrBlank()) {
+                binding.destinationInput.setText(v.text.toString())
+            }
             false
         }
         binding.gasStationInput.addTextChangedListener(simpleTextWatcher { text ->
-            if (binding.refuelCheck.isChecked) binding.destinationInput.setText(text)
-        })
-
-        binding.fuelCostInput.addTextChangedListener(simpleTextWatcher { text ->
-            val cost = text.toDoubleOrNull()
-            if (cost != null) {
-                val full = cost > 200 && cost % 1 != 0.0
-                binding.tankFullRadio.isChecked = full
-                binding.tankPartialRadio.isChecked = !full
+            if (binding.refuelCheck.isChecked && binding.destinationInput.text.isNullOrBlank()) {
+                binding.destinationInput.setText(text)
             }
         })
 
+        // A4：移除「金额>200 且有小数即判加满」的粗暴推断，油箱状态完全交由用户手动选择
+
         binding.fuelTypeSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val value = fuelTypeValue(position)
+                val value = fuelTypeValue(requireContext(), position)
                 if (value.isNotBlank()) Repository.lastFuelType = value
             }
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
@@ -230,7 +233,14 @@ class RecordFragment : Fragment() {
             input.isEnabled = !checked
             error.visibility = View.GONE
             if (input is EditText) {
-                if (checked) input.text?.clear()
+                if (checked) {
+                    // C4：勾选前暂存原值，取消勾选时还原
+                    forgotSavedValues[input.id] = input.text?.toString().orEmpty()
+                    input.text?.clear()
+                } else {
+                    val saved = forgotSavedValues.remove(input.id)
+                    if (saved != null) input.setText(saved)
+                }
             } else if (input is android.widget.Spinner) {
                 input.isEnabled = !checked
             }
@@ -290,7 +300,7 @@ class RecordFragment : Fragment() {
         val station = binding.gasStationInput.text.toString().trim()
         val liters = binding.fuelLitersInput.doubleOrNull()
         val cost = binding.fuelCostInput.doubleOrNull()
-        val fuelType = fuelTypeValue(binding.fuelTypeSpinner.selectedItemPosition)
+        val fuelType = fuelTypeValue(requireContext(), binding.fuelTypeSpinner.selectedItemPosition)
         val forgotStation = binding.forgotGasStationCheck.isChecked
         val forgotLiters = binding.forgotFuelLitersCheck.isChecked
         val forgotCost = binding.forgotFuelCostCheck.isChecked
@@ -446,7 +456,11 @@ class RecordFragment : Fragment() {
 
     private fun onPhotoReady(path: String) {
         val photos = Repository.loadPhotos()
-        if (photos.size >= 10) photos.removeAt(0)
+        if (photos.size >= 10) {
+            // B4：移除列表时同步删除实际图片文件，避免 filesDir/photos 无限累积
+            val removed = photos.removeAt(0)
+            runCatching { File(removed.path).delete() }
+        }
         photos.add(CameraPhoto(System.currentTimeMillis(), path, dateFormat.format(Date())))
         Repository.savePhotos(photos)
         currentPhotoPath = path
@@ -476,20 +490,19 @@ class RecordFragment : Fragment() {
     }
 
     private fun applyOcrResult(station: String?, liters: Double?, cost: Double?, type: String?) {
+        // A1：程序化勾选时抑制附近站弹页，OCR 结果不应被打断
+        suppressStationPrompt = true
         binding.refuelCheck.isChecked = true
+        suppressStationPrompt = false
         binding.fuelDetailsLayout.show(true)
         if (!station.isNullOrBlank()) {
             binding.gasStationInput.setText(station)
-            binding.destinationInput.setText(station)
+            if (binding.destinationInput.text.isNullOrBlank()) binding.destinationInput.setText(station)
         }
         if (liters != null) binding.fuelLitersInput.setText(liters.toString())
         if (cost != null) binding.fuelCostInput.setText(cost.toString())
-        if (!type.isNullOrBlank()) binding.fuelTypeSpinner.setSelection(fuelTypePosition(type))
-        if (cost != null) {
-            val full = cost > 200 && cost % 1 != 0.0
-            binding.tankFullRadio.isChecked = full
-            binding.tankPartialRadio.isChecked = !full
-        }
+        if (!type.isNullOrBlank()) binding.fuelTypeSpinner.setSelection(fuelTypePosition(requireContext(), type))
+        // A4：油箱状态不再由金额推断，保持默认「加满」，用户可自行改
         requireContext().toast("信息已自动填充，请检查并完善其他字段", long = true)
     }
 }

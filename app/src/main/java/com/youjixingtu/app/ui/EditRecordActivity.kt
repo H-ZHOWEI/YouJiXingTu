@@ -29,6 +29,10 @@ class EditRecordActivity : AppCompatActivity() {
     private var currentDate = Date()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
     private lateinit var nearbyStationLauncher: ActivityResultLauncher<Intent>
+    /** 程序化设置勾选时抑制弹页（A1） */
+    private var suppressStationPrompt = false
+    /** 「我忘记了」原值暂存（C4） */
+    private val forgotSavedValues = mutableMapOf<Int, String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,7 +75,7 @@ class EditRecordActivity : AppCompatActivity() {
             binding.editGasStationInput.setText(fuel.gasStation ?: "")
             binding.editFuelLitersInput.setText(fuel.fuelLiters?.toString() ?: "")
             binding.editFuelCostInput.setText(fuel.fuelCost?.toString() ?: "")
-            binding.editFuelTypeSpinner.setSelection(fuelTypePosition(fuel.fuelType))
+            binding.editFuelTypeSpinner.setSelection(fuelTypePosition(this, fuel.fuelType))
 
             binding.editForgotGasStationCheck.isChecked = ff?.gasStation == true
             binding.editForgotFuelLitersCheck.isChecked = ff?.fuelLiters == true
@@ -92,7 +96,7 @@ class EditRecordActivity : AppCompatActivity() {
     /** 将选中的加油站填入「加油站名称」与「去了哪里」 */
     private fun applyPickedStation(station: String) {
         binding.editGasStationInput.setText(station)
-        binding.editDestinationInput.setText(station)
+        if (binding.editDestinationInput.text.isNullOrBlank()) binding.editDestinationInput.setText(station)
         Repository.lastGasStation = station
         toast("已填入：$station，可修改", long = true)
     }
@@ -108,26 +112,22 @@ class EditRecordActivity : AppCompatActivity() {
 
         binding.editRefuelCheck.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
             binding.editFuelDetailsLayout.show(checked)
-            if (checked) {
-                // 勾选「本次加油了」：弹出附近加油站（5 公里）让用户选择，选中后自动填入
+            // A1/A3：仅用户主动勾选且加油站为空时弹站，避免重复/误触发弹页
+            if (checked && !suppressStationPrompt && binding.editGasStationInput.text.isNullOrBlank()) {
                 val intent = Intent(this, NearbyStationActivity::class.java)
                 nearbyStationLauncher.launch(intent)
             }
         }
         binding.editGasStationInput.addTextChangedListener(simpleTextWatcher { text ->
-            if (binding.editRefuelCheck.isChecked) binding.editDestinationInput.setText(text)
-        })
-        binding.editFuelCostInput.addTextChangedListener(simpleTextWatcher { text ->
-            val cost = text.toDoubleOrNull()
-            if (cost != null) {
-                val full = cost > 200 && cost % 1 != 0.0
-                binding.editTankFullRadio.isChecked = full
-                binding.editTankPartialRadio.isChecked = !full
+            // A5：仅目的地为空时带入站名，不覆盖用户已填内容
+            if (binding.editRefuelCheck.isChecked && binding.editDestinationInput.text.isNullOrBlank()) {
+                binding.editDestinationInput.setText(text)
             }
         })
+        // A4：移除金额自动判满逻辑，油箱状态完全手动
         binding.editFuelTypeSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val value = fuelTypeValue(position)
+                val value = fuelTypeValue(this@EditRecordActivity, position)
                 if (value.isNotBlank()) Repository.lastFuelType = value
             }
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
@@ -141,7 +141,15 @@ class EditRecordActivity : AppCompatActivity() {
         check.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
             input.isEnabled = !checked
             error.visibility = View.GONE
-            if (input is android.widget.EditText && checked) input.text?.clear()
+            if (input is android.widget.EditText) {
+                if (checked) {
+                    forgotSavedValues[input.id] = input.text?.toString().orEmpty()
+                    input.text?.clear()
+                } else {
+                    val saved = forgotSavedValues.remove(input.id)
+                    if (saved != null) input.setText(saved)
+                }
+            }
         }
     }
 
@@ -201,7 +209,7 @@ class EditRecordActivity : AppCompatActivity() {
         val station = binding.editGasStationInput.text.toString().trim()
         val liters = binding.editFuelLitersInput.doubleOrNull()
         val cost = binding.editFuelCostInput.doubleOrNull()
-        val fuelType = fuelTypeValue(binding.editFuelTypeSpinner.selectedItemPosition)
+        val fuelType = fuelTypeValue(this, binding.editFuelTypeSpinner.selectedItemPosition)
         val forgotStation = binding.editForgotGasStationCheck.isChecked
         val forgotLiters = binding.editForgotFuelLitersCheck.isChecked
         val forgotCost = binding.editForgotFuelCostCheck.isChecked
@@ -229,6 +237,7 @@ class EditRecordActivity : AppCompatActivity() {
         val hasFuelData = refuel || station.isNotBlank() || liters != null || cost != null || fuelType.isNotBlank()
         val updated = original.copy(
             date = dateFormat.format(currentDate),
+            timestamp = currentDate.time, // A2：日期改动后同步刷新时间戳，保证「最近加油站」派生准确
             mileage = mileage,
             destination = destination,
             isRefuel = refuel,

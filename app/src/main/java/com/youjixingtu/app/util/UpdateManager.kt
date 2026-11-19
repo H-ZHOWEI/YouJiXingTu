@@ -120,12 +120,6 @@ object UpdateManager {
         CheckResult.Failed(if (reachedServer) "检查更新失败，请稍后重试" else lastError)
     }
 
-    /** 兼容旧调用：只关心是否有新版本 */
-    suspend fun checkUpdate(context: Context, attempts: Int = 3): Info? = when (val r = checkUpdateDetailed(context, attempts)) {
-        is CheckResult.NewVersion -> r.info
-        else -> null
-    }
-
     private fun fetchRelease(url: String, current: String): Info? {
         val request = Request.Builder()
             .url(url)

@@ -79,7 +79,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        binding.starField.resumeAnimation() // D1
         silentCheck()
+    }
+
+    override fun onPause() {
+        binding.starField.pauseAnimation() // D1：后台暂停星空动画
+        super.onPause()
     }
 
     private fun switchFragment(target: Fragment) {
@@ -135,7 +141,12 @@ class MainActivity : AppCompatActivity() {
         pendingInfo = info
         binding.updateBanner.visibility = View.VISIBLE
         binding.skipVersionBtn.visibility = if (fromStartup) View.VISIBLE else View.GONE
-        val note = info.notes.takeIf { it.isNotBlank() }?.let { "\n$it" }.orEmpty()
+        // C1：更新说明可能是一整段 CHANGELOG，截断避免撑爆横幅
+        val note = info.notes.takeIf { it.isNotBlank() }?.let {
+            val trimmed = it.replace('\r', ' ').replace('\n', ' ')
+            val short = if (trimmed.length > 80) trimmed.take(80) + "…" else trimmed
+            "\n$short"
+        }.orEmpty()
         binding.updateBannerText.text = "发现新版本 v${info.version}$note"
     }
 

@@ -30,7 +30,8 @@ app/src/main/java/com/youjixingtu/app/
   ui/                      MainActivity 与四个页签、编辑页、OCR 页、附近加油站选择页
   util/UpdateManager.kt    版本更新
   util/TextExtractHelper.kt 小票文本提取
-  (高德 SDK 接入在 ui/NearbyStationActivity.kt，Key 占位符在 AndroidManifest.xml)
+  util/CryptoUtil.kt       Keystore AES-GCM 透明加密（v1.7）
+  (高德 SDK 接入在 ui/NearbyStationActivity.kt，Key 可在 App 内设置或写 Manifest 占位符)
 app/src/main/res/          布局、主题、图标、FileProvider 配置
 ```
 
@@ -62,7 +63,11 @@ app/src/main/res/          布局、主题、图标、FileProvider 配置
 
 ## 附近加油站（高德 Key）
 
-勾选「本次加油了」会弹出附近加油站选择页，用高德 SDK 定位并搜索 5 公里内的加油站。按合规要求软件不内置任何地图 Key，首次使用需自行到 <https://console.amap.com> 免费申请 Android 平台 Key，填入 `app/src/main/AndroidManifest.xml` 中 `com.amap.api.v2.apikey` 的 `android:value`（当前为占位符）。申请时包名填 `com.youjixingtu.app`，调试签名 SHA1 为 `98:52:6E:3A:80:E5:2A:60:E8:59:49:CC:0C:94:E5:9F:98:4C:D0:83`。详细步骤见《操作说明》第八节。不配 Key 不影响其它功能，只是附近加油站列表为空、需手动输入站名。
+勾选「本次加油了」会弹出附近加油站选择页，用高德 SDK 定位并搜索 5 公里内的加油站。按合规要求软件不内置任何地图 Key，需自行到 <https://console.amap.com> 免费申请 Android 平台 Key。**v1.7 起推荐在 App 内配置**：进入「选择加油站」页 → 点「设置Key」→ 粘贴 Key → 保存即生效，免改代码、免重装；App 内配置的 Key 优先于 Manifest。也可在编译前把 Key 填入 `app/src/main/AndroidManifest.xml` 的 `com.amap.api.v2.apikey` `android:value`（占位符）。申请时包名填 `com.youjixingtu.app`，调试签名 SHA1 为 `98:52:6E:3A:80:E5:2A:60:E8:59:49:CC:0C:94:E5:9F:98:4C:D0:83`。详细步骤见《操作说明》第八节。不配 Key 不影响其它功能，只是附近加油站列表为空、需手动输入站名。
+
+## 数据安全（v1.7）
+
+加油记录与照片列表在本地用 Android Keystore 中的 AES-256 密钥透明加密存储，密钥由系统硬件保管、不随应用备份导出；`allowBackup` 已关闭。旧版本未加密的数据会在首次读取时自动兼容，保存时平滑升级为加密格式。若系统 Keystore 不可用会自动降级为明文，绝不因加密失败丢数据。
 
 ## 说明
 

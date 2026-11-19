@@ -1,9 +1,12 @@
 package com.youjixingtu.app.ui
 
 import android.app.Activity
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.exifinterface.media.ExifInterface
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
@@ -54,7 +57,8 @@ class OcrActivity : AppCompatActivity() {
     private fun runOcr(path: String) {
         binding.extractBtn.isEnabled = false
         try {
-            val image = InputImage.fromFilePath(this, Uri.fromFile(File(path)))
+            // D2：大图先降采样，避免高分辨率照片导致 ML Kit OOM
+            val image = buildInputImage(path)
             val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
@@ -80,6 +84,28 @@ class OcrActivity : AppCompatActivity() {
             binding.extractBtn.isEnabled = true
             toast("无法读取照片，请手动填写")
         }
+    }
+
+    /** D2：超过 1600px 的图片降采样后再识别，保留 EXIF 旋转信息 */
+    private fun buildInputImage(path: String): InputImage {
+        val file = File(path)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        val maxSide = maxOf(bounds.outWidth, bounds.outHeight)
+        if (maxSide <= 1600) return InputImage.fromFilePath(this, Uri.fromFile(file))
+
+        val sample = maxOf(1, maxSide / 1600)
+        val bitmap = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: return InputImage.fromFilePath(this, Uri.fromFile(file))
+        val rotation = try {
+            when (ExifInterface(path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                else -> 0
+            }
+        } catch (_: Exception) { 0 }
+        return InputImage.fromBitmap(bitmap, rotation)
     }
 
     private fun extract() = extractInternal(showToast = true)

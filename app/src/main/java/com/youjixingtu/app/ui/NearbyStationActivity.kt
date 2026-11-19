@@ -7,7 +7,10 @@ import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.EditText
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.amap.api.location.AMapLocationClient
@@ -15,6 +18,8 @@ import com.amap.api.location.AMapLocationClientOption
 import com.amap.api.location.AMapLocationListener
 import com.amap.api.services.core.LatLonPoint
 import com.amap.api.services.core.PoiItem
+import com.amap.api.services.core.ServiceSettings
+import com.youjixingtu.app.data.Repository
 import com.amap.api.services.poisearch.PoiResult
 import com.amap.api.services.poisearch.PoiSearch
 import com.youjixingtu.app.databinding.ActivityNearbyStationBinding
@@ -40,13 +45,43 @@ class NearbyStationActivity : AppCompatActivity() {
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) startLocate() else fallbackToHistory("需要定位权限才能搜索附近加油站，可从下方手动输入")
+        if (granted) {
+            startLocate()
+        } else {
+            // C2：被永久拒绝（不再询问）时引导去系统设置开启
+            val permanent = !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
+            if (permanent) {
+                AlertDialog.Builder(this)
+                    .setTitle("定位权限已被拒绝")
+                    .setMessage("定位权限已被设为「不再询问」。请到 系统设置 → 应用 → 油迹星图 → 权限 中允许「位置信息」，回来后即可搜索附近加油站；或直接在下方手动输入。")
+                    .setPositiveButton("去设置") { _, _ ->
+                        runCatching {
+                            startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = android.net.Uri.parse("package:$packageName")
+                            })
+                        }
+                    }
+                    .setNegativeButton("手动输入") { _, _ ->
+                        fallbackToHistory("未开启定位权限，可从下方手动输入或从历史中选择")
+                    }
+                    .show()
+            } else {
+                fallbackToHistory("需要定位权限才能搜索附近加油站，可从下方手动输入")
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityNearbyStationBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // B5：App 内配置的 Key 优先，运行时注入定位/搜索 SDK，免重新打包
+        val key = Repository.amapKey
+        if (key.isNotBlank()) {
+            runCatching { AMapLocationClient.setApiKey(key) }
+            runCatching { ServiceSettings.getInstance().setApiKey(key) }
+        }
 
         adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, stationList)
         binding.nearbyListView.adapter = adapter
@@ -62,9 +97,46 @@ class NearbyStationActivity : AppCompatActivity() {
             }
         }
         binding.nearbyCancelBtn.setOnClickListener { finish() }
+        binding.nearbySetKeyBtn.setOnClickListener { showKeyDialog() }
 
         // 预置历史加油站，定位期间也可见，失败时作为兜底
         loadHistoryIntoList()
+        checkPermissionAndLocate()
+    }
+
+    /** B5：App 内配置高德 Key，保存后即时生效（重新走定位流程） */
+    private fun showKeyDialog() {
+        val input = EditText(this).apply {
+            hint = "粘贴高德 Android 平台 Key"
+            setText(Repository.amapKey)
+            setSingleLine(true)
+            val p = resources.getDimensionPixelSize(android.R.dimen.app_icon_size) / 4
+            setPadding(p, p, p, p)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("设置高德地图 Key")
+            .setMessage("到 console.amap.com 免费申请 Android 平台 Key（包名 com.youjixingtu.app），填入即可启用附近加油站，无需重新打包。")
+            .setView(input)
+            .setPositiveButton("保存并重试") { _, _ ->
+                val key = input.text?.toString()?.trim().orEmpty()
+                Repository.amapKey = key
+                if (key.isBlank()) {
+                    toast("已清除 Key，将使用安装包内置 Key（如有）")
+                } else {
+                    runCatching { AMapLocationClient.setApiKey(key) }
+                    runCatching { ServiceSettings.getInstance().setApiKey(key) }
+                    toast("Key 已保存，重新定位…")
+                }
+                // 重置列表与状态后重走定位
+                settled = false
+                loadHistoryIntoList()
+                checkPermissionAndLocate()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun checkPermissionAndLocate() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             == PackageManager.PERMISSION_GRANTED
         ) {
@@ -93,10 +165,19 @@ class NearbyStationActivity : AppCompatActivity() {
                 locationClient = AMapLocationClient(applicationContext).apply {
                     setLocationListener(AMapLocationListener { location ->
                         if (location != null && location.errorCode == 0) {
+                            // C3：缓存成功定位，供后续失败时兜底
+                            Repository.lastLocation = Triple(location.latitude, location.longitude, System.currentTimeMillis())
                             searchNearby(location.latitude, location.longitude)
                         } else {
+                            // C3：定位失败则用上次成功坐标兜底搜索
+                            val cached = Repository.lastLocation
                             val reason = location?.errorInfo ?: "定位失败"
-                            fallbackToHistory("定位失败：$reason，可手动输入或从历史中选择")
+                            if (cached != null) {
+                                binding.nearbyStatusText.text = "定位失败（$reason），试用上次位置搜索…"
+                                searchNearby(cached.first, cached.second)
+                            } else {
+                                fallbackToHistory("定位失败：$reason，可手动输入或从历史中选择")
+                            }
                         }
                     })
                 }

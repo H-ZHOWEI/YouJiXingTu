@@ -13,7 +13,7 @@
 
     <application
         android:name=".YouJiApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
@@ -27,7 +27,10 @@
             · 包名：com.youjixingtu.app
             · 签名 SHA1（调试包）：98:52:6E:3A:80:E5:2A:60:E8:59:49:CC:0C:94:E5:9F:98:4C:D0:83
             · 若用自己的正式签名打包，请改用对应签名的 SHA1
-          申请到后，把下面 value 的占位文字替换为真实 key 即可启用「附近加油站」。
+          两种方式启用「附近加油站」（任选其一）：
+            1）App 内：记录页底部「设置附近加油站Key」入口，填入后即时生效（v1.7 新增，推荐，免重装）；
+            2）编译前：把下面 value 的占位文字替换为真实 key 后重新打包。
+          App 内配置的 key 优先于此处 Manifest 值。
         -->
         <meta-data
             android:name="com.amap.api.v2.apikey"
@@ -49,7 +52,6 @@
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
-            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -61,21 +63,18 @@
             android:name=".ui.EditRecordActivity"
             android:exported="false"
             android:label="编辑星迹"
-            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".ui.OcrActivity"
             android:exported="false"
             android:label="提取小票信息"
-            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".ui.NearbyStationActivity"
             android:exported="false"
             android:label="选择加油站"
-            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>

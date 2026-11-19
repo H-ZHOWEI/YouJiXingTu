@@ -61,4 +61,13 @@ class StarFieldView @JvmOverloads constructor(
         animator.cancel()
         super.onDetachedFromWindow()
     }
+
+    /** D1：Activity 退到后台时暂停逐帧绘制，省电 */
+    fun pauseAnimation() {
+        if (animator.isRunning) animator.pause()
+    }
+
+    fun resumeAnimation() {
+        if (!animator.isRunning) animator.resume()
+    }
 }

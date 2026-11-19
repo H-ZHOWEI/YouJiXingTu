@@ -5,8 +5,9 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.widget.EditText
-import android.widget.Spinner
 import android.widget.Toast
+import com.youjixingtu.app.R
+import java.util.Locale
 
 fun Context.toast(message: String, long: Boolean = false) {
     Toast.makeText(this, message, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
@@ -20,25 +21,17 @@ fun EditText.doubleOrNull(): Double? = text.toString().trim().toDoubleOrNull()
 
 fun EditText.intOrNull(): Int? = text.toString().trim().toIntOrNull()
 
-fun fuelTypeValue(position: Int): String = when (position) {
-    1 -> "92"
-    2 -> "95"
-    3 -> "98"
-    4 -> "0"
-    else -> ""
+/** E3：油品值与数组资源统一取源，避免硬编码索引与 arrays.xml 隐性耦合 */
+fun fuelTypeValue(context: Context, position: Int): String =
+    context.resources.getStringArray(R.array.fuel_type_values).getOrNull(position).orEmpty()
+
+fun fuelTypePosition(context: Context, value: String?): Int {
+    val values = context.resources.getStringArray(R.array.fuel_type_values)
+    return values.indexOf(value ?: "").let { if (it >= 0) it else 0 }
 }
 
-fun fuelTypePosition(value: String?): Int = when (value) {
-    "92" -> 1
-    "95" -> 2
-    "98" -> 3
-    "0" -> 4
-    else -> 0
-}
-
-fun Spinner.selectedFuelType(): String = fuelTypeValue(selectedItemPosition)
-
-fun formatNumber(value: Double, digits: Int = 2): String = String.format("%.${digits}f", value)
+fun formatNumber(value: Double, digits: Int = 2): String =
+    String.format(Locale.getDefault(), "%.${digits}f", value)
 
 fun simpleTextWatcher(onChange: (String) -> Unit) = object : TextWatcher {
     override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}

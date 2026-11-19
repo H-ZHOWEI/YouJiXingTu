@@ -86,11 +86,22 @@
             android:textSize="14sp" />
 
         <Button
+            android:id="@+id/nearbySetKeyBtn"
+            android:layout_width="0dp"
+            android:layout_height="42dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_button_ghost"
+            android:text="设置Key"
+            android:textColor="@color/average"
+            android:textSize="13sp" />
+
+        <Button
             android:id="@+id/nearbyConfirmBtn"
             android:layout_width="0dp"
             android:layout_height="42dp"
-            android:layout_marginStart="10dp"
-            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1.2"
             android:background="@drawable/bg_button_primary"
             android:text="使用此名称"
             android:textColor="@color/white"

@@ -77,16 +77,4 @@ object TextExtractHelper {
 
         return Result(station, liters, cost, type)
     }
-
-    const val MOCK_RECEIPT = """中国石化加油站
-收据号: 20231215001
-日期: 2023-12-15 14:30
-
-92号汽油
-加油量: 45.6升
-单价: 7.85元/升
-金额: 357.96元
-
-支付方式: 微信支付
-感谢您的光临！"""
 }

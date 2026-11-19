@@ -10,8 +10,8 @@ android {
         applicationId = "com.youjixingtu.app"
         minSdk = 24
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
         vectorDrawables.useSupportLibrary = true
         // 真机只需 ARM 架构；排除 x86/x86_64 可省约 22MB（OCR 引擎 so）
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }

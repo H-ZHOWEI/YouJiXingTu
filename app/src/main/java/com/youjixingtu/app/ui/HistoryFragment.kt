@@ -20,6 +20,7 @@ import com.youjixingtu.app.data.Repository
 import com.youjixingtu.app.databinding.DialogTextIoBinding
 import com.youjixingtu.app.databinding.FragmentHistoryBinding
 import com.youjixingtu.app.model.FuelRecord
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -62,8 +63,12 @@ class HistoryFragment : Fragment() {
         binding.historyRecycler.layoutManager = LinearLayoutManager(requireContext())
         binding.deleteAllBtn.setOnClickListener {
             confirm("清除星迹", "您确定要清除所有星迹吗？此操作不可恢复。") {
+                // B4：清空记录时同步删除照片文件与照片列表
+                Repository.loadPhotos().forEach { runCatching { File(it.path).delete() } }
+                Repository.savePhotos(emptyList())
                 records.clear()
                 Repository.saveRecords(records)
+                Repository.invalidateCache()
                 currentPage = 1
                 refresh()
                 requireContext().toast("所有星迹已清除")
@@ -264,6 +269,7 @@ class HistoryFragment : Fragment() {
             Analytics.normalizeImported(newRecords)
             records.addAll(newRecords)
             Repository.saveRecords(records)
+            Repository.invalidateCache()
             refresh()
             requireContext().toast("成功导入 ${newRecords.size} 条星迹记录")
         } catch (e: Exception) {
