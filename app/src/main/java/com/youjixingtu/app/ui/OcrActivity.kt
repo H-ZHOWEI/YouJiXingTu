@@ -128,16 +128,17 @@ class OcrActivity : AppCompatActivity() {
         val histPrice = Analytics.historicalPricePerLiter(records, station.ifBlank { null })
             ?: Analytics.historicalPricePerLiter(records)
         if (histPrice != null && histPrice > 0) {
+            val histPriceTxt = String.format(java.util.Locale.getDefault(), "%.2f", histPrice)
             val litersTxt = binding.ocrLitersInput.text?.toString()?.trim().orEmpty()
             val costTxt = binding.ocrCostInput.text?.toString()?.trim().orEmpty()
             if (litersTxt.isBlank() && costTxt.toDoubleOrNull() != null && result.fuelLiters == null) {
                 val est = costTxt.toDouble() / histPrice
                 binding.ocrLitersInput.setText(String.format(java.util.Locale.getDefault(), "%.2f", est))
-                hints.add("加油量按历史单价 $histPrice 元/升估算，请核对")
+                hints.add("加油量按历史单价 $histPriceTxt 元/升估算，请核对")
             } else if (costTxt.isBlank() && litersTxt.toDoubleOrNull() != null && result.fuelCost == null) {
                 val est = litersTxt.toDouble() * histPrice
                 binding.ocrCostInput.setText(String.format(java.util.Locale.getDefault(), "%.2f", est))
-                hints.add("金额按历史单价 $histPrice 元/升估算，请核对")
+                hints.add("金额按历史单价 $histPriceTxt 元/升估算，请核对")
             }
         }
 
