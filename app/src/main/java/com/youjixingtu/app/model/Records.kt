@@ -12,7 +12,9 @@ data class ForgottenFuelFields(
     var gasStation: Boolean = false,
     var fuelLiters: Boolean = false,
     var fuelCost: Boolean = false,
-    var fuelType: Boolean = false
+    var fuelType: Boolean = false,
+    var gaugeBefore: Boolean = false,
+    var gaugeAfter: Boolean = false
 )
 
 data class RefuelData(
@@ -20,6 +22,10 @@ data class RefuelData(
     var fuelLiters: Double? = null,
     var fuelCost: Double? = null,
     var fuelType: String? = null,
+    /** 加油前油表格数（选填，v1.14） */
+    var gaugeBefore: Double? = null,
+    /** 加油后油表格数（选填，v1.14） */
+    var gaugeAfter: Double? = null,
     var forgottenFields: ForgottenFuelFields? = null
 )
 
@@ -31,6 +37,8 @@ data class FuelRecord(
     var destination: String = "",
     var isRefuel: Boolean = false,
     var tankStatus: String = "full",
+    /** 当前油表格数（选填，任何记录可填，v1.14） */
+    var gaugeNow: Double? = null,
     var forgottenFields: ForgottenFields? = null,
     var refuelData: RefuelData? = null
 ) {

@@ -77,6 +77,8 @@ class EditRecordActivity : AppCompatActivity() {
             binding.editGasStationInput.setText(fuel.gasStation ?: "")
             binding.editFuelLitersInput.setText(fuel.fuelLiters?.toString() ?: "")
             binding.editFuelCostInput.setText(fuel.fuelCost?.toString() ?: "")
+            binding.editGaugeBeforeInput.setText(fuel.gaugeBefore?.toString() ?: "")
+            binding.editGaugeAfterInput.setText(fuel.gaugeAfter?.toString() ?: "")
             binding.editFuelTypeSpinner.setSelection(fuelTypePosition(this, fuel.fuelType))
 
             binding.editForgotGasStationCheck.isChecked = ff?.gasStation == true
@@ -91,6 +93,7 @@ class EditRecordActivity : AppCompatActivity() {
         }
 
         if (record.tankStatus == "partial") binding.editTankPartialRadio.isChecked = true
+        binding.editGaugeNowInput.setText(record.gaugeNow?.toString() ?: "")
 
         // I15：常用目的地补全
         val dest = binding.editDestinationInput as AutoCompleteTextView
@@ -293,7 +296,16 @@ class EditRecordActivity : AppCompatActivity() {
             }
         }
 
-        val hasFuelData = refuel || station.isNotBlank() || liters != null || cost != null || fuelType.isNotBlank()
+        val gaugeBefore = binding.editGaugeBeforeInput.doubleOrNull()
+        val gaugeAfter = binding.editGaugeAfterInput.doubleOrNull()
+        val gaugeNow = binding.editGaugeNowInput.doubleOrNull()
+        val total = Repository.gaugeTotal
+        if (listOf(gaugeBefore, gaugeAfter, gaugeNow).any { it != null && (it < 0 || it > total) }) {
+            toast("格数需在 0 ~ $total 之间")
+            return
+        }
+        val hasFuelData = refuel || station.isNotBlank() || liters != null || cost != null ||
+            fuelType.isNotBlank() || gaugeBefore != null || gaugeAfter != null
         val updated = original.copy(
             date = dateFormat.format(currentDate),
             timestamp = currentDate.time, // A2：日期改动后同步刷新时间戳，保证「最近加油站」派生准确
@@ -301,12 +313,15 @@ class EditRecordActivity : AppCompatActivity() {
             destination = destination,
             isRefuel = refuel,
             tankStatus = if (binding.editTankFullRadio.isChecked) "full" else "partial",
+            gaugeNow = gaugeNow,
             forgottenFields = ForgottenFields(mileage = binding.editForgotMileageCheck.isChecked),
             refuelData = if (hasFuelData) RefuelData(
                 gasStation = if (forgotStation) null else station.ifBlank { null },
                 fuelLiters = if (forgotLiters) null else liters,
                 fuelCost = if (forgotCost) null else cost,
                 fuelType = if (forgotType) null else fuelType.ifBlank { null },
+                gaugeBefore = gaugeBefore,
+                gaugeAfter = gaugeAfter,
                 forgottenFields = ForgottenFuelFields(forgotStation, forgotLiters, forgotCost, forgotType)
             ) else null
         )

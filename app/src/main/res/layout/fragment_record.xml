@@ -16,89 +16,6 @@
             android:orientation="vertical"
             android:layout_marginBottom="10dp">
 
-            <TextView style="@style/CardTitle" android:text="📷 快速拍照记录" android:drawablePadding="6dp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:orientation="horizontal">
-
-                <Button
-                    android:id="@+id/takePhotoBtn"
-                    android:layout_width="0dp"
-                    android:layout_height="40dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_button_primary"
-                    android:text="拍照"
-                    android:textColor="@color/white"
-                    android:textSize="13sp" />
-
-                <Button
-                    android:id="@+id/uploadPhotoBtn"
-                    android:layout_width="0dp"
-                    android:layout_height="40dp"
-                    android:layout_marginStart="8dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_button_ghost"
-                    android:text="上传照片"
-                    android:textColor="@color/primary"
-                    android:textSize="13sp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/cameraPreview"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <ImageView
-                    android:id="@+id/photoPreview"
-                    android:layout_width="match_parent"
-                    android:layout_height="180dp"
-                    android:adjustViewBounds="true"
-                    android:background="@drawable/bg_field"
-                    android:scaleType="centerCrop" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:orientation="horizontal">
-
-                    <Button
-                        android:id="@+id/retakePhotoBtn"
-                        android:layout_width="0dp"
-                        android:layout_height="38dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_button_ghost"
-                        android:text="重拍"
-                        android:textColor="@color/muted"
-                        android:textSize="13sp" />
-
-                    <Button
-                        android:id="@+id/analyzePhotoBtn"
-                        android:layout_width="0dp"
-                        android:layout_height="38dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_button_primary"
-                        android:text="提取信息"
-                        android:textColor="@color/white"
-                        android:textSize="13sp" />
-                </LinearLayout>
-            </LinearLayout>
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_card"
-            android:orientation="vertical"
-            android:layout_marginBottom="10dp">
-
             <TextView style="@style/CardTitle" android:text="🛰️ 星迹记录" />
 
             <TextView style="@style/LabelText" android:layout_marginTop="10dp" android:text="日期时间 *" />
@@ -275,6 +192,54 @@
                         android:textSize="13sp" />
                 </RadioGroup>
 
+                <TextView style="@style/LabelText" android:layout_marginTop="8dp" android:text="油表格数（选填，填得越多估算越准）" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="horizontal">
+
+                    <EditText
+                        android:id="@+id/gaugeBeforeInput"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_field"
+                        android:hint="加油前格数"
+                        android:inputType="numberDecimal"
+                        android:paddingStart="10dp"
+                        android:textColor="@color/light"
+                        android:textColorHint="@color/muted"
+                        android:textSize="13sp" />
+
+                    <EditText
+                        android:id="@+id/gaugeAfterInput"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_field"
+                        android:hint="加油后格数"
+                        android:inputType="numberDecimal"
+                        android:paddingStart="10dp"
+                        android:textColor="@color/light"
+                        android:textColorHint="@color/muted"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <EditText
+                    android:id="@+id/gaugeNowInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_field"
+                    android:hint="当前格数（不加油时也可单独更新）"
+                    android:inputType="numberDecimal"
+                    android:paddingStart="10dp"
+                    android:textColor="@color/light"
+                    android:textColorHint="@color/muted"
+                    android:textSize="13sp" />
+
                 <TextView
                     android:id="@+id/smartHintText"
                     android:layout_width="match_parent"
@@ -373,11 +338,56 @@
                 android:text="可行驶距离: -- 公里"
                 android:textSize="12sp" />
             <TextView
+                android:id="@+id/remainingValueText"
+                style="@style/LabelText"
+                android:layout_gravity="center_horizontal"
+                android:text="当前油量价值: -- 元"
+                android:textSize="12sp" />
+            <TextView
                 android:id="@+id/estimatedTankCapacityText"
                 style="@style/LabelText"
                 android:layout_gravity="center_horizontal"
                 android:text="估算油箱容量: -- 升"
                 android:textSize="12sp" />
+            <TextView
+                android:id="@+id/gaugeDetailText"
+                style="@style/LabelText"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/average"
+                android:textSize="11sp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/gaugeCurrentInput"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_field"
+                    android:hint="当前油表格数（选填）"
+                    android:inputType="numberDecimal"
+                    android:paddingStart="10dp"
+                    android:textColor="@color/light"
+                    android:textColorHint="@color/muted"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/saveGaugeCurrentBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_button_ghost"
+                    android:text="更新"
+                    android:textColor="@color/primary"
+                    android:textSize="13sp" />
+            </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -401,6 +411,37 @@
 
                 <Button
                     android:id="@+id/saveTankCapacityBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_button_ghost"
+                    android:text="保存"
+                    android:textColor="@color/primary"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/gaugeTotalInput"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_field"
+                    android:hint="油表总格数（默认12）"
+                    android:inputType="number"
+                    android:paddingStart="10dp"
+                    android:textColor="@color/light"
+                    android:textColorHint="@color/muted"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/saveGaugeTotalBtn"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
                     android:layout_marginStart="8dp"

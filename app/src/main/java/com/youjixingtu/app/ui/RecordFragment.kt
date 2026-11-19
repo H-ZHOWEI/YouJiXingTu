@@ -1,17 +1,10 @@
 package com.youjixingtu.app.ui
 
-import android.Manifest
 import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
-import android.content.ContentValues
-import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -22,19 +15,15 @@ import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import com.youjixingtu.app.R
 import com.youjixingtu.app.core.Analytics
 import com.youjixingtu.app.data.Repository
 import com.youjixingtu.app.databinding.FragmentRecordBinding
-import com.youjixingtu.app.model.CameraPhoto
 import com.youjixingtu.app.model.ForgottenFields
 import com.youjixingtu.app.model.ForgottenFuelFields
 import com.youjixingtu.app.model.FuelRecord
 import com.youjixingtu.app.model.RefuelData
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -48,8 +37,7 @@ class RecordFragment : Fragment() {
     private var records = mutableListOf<FuelRecord>()
     private var dateTimeLocked = false
     private var currentDate = Date()
-    private var currentPhotoPath: String? = null
-    /** 程序化设置 refuelCheck 时抑制弹页（A1：OCR 自动填充不应触发附近站选择） */
+    /** 程序化设置 refuelCheck 时抑制弹页 */
     private var suppressStationPrompt = false
     /** 「我忘记了」勾选前的原值，取消勾选时还原（C4） */
     private val forgotSavedValues = mutableMapOf<Int, String>()
@@ -57,37 +45,11 @@ class RecordFragment : Fragment() {
     private var hasShownEmptyGuide = false
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
-    private val dayFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
-    private lateinit var cameraPermissionLauncher: ActivityResultLauncher<String>
-    private lateinit var takePictureLauncher: ActivityResultLauncher<Uri>
-    private lateinit var pickImageLauncher: ActivityResultLauncher<String>
-    private lateinit var ocrLauncher: ActivityResultLauncher<Intent>
     private lateinit var nearbyStationLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        cameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) launchCamera() else requireContext().toast("需要相机权限才能拍照，可使用上传照片")
-        }
-        takePictureLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-            if (success && currentPhotoPath != null) onPhotoReady(currentPhotoPath!!)
-        }
-        pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri != null) copyGalleryImage(uri)
-        }
-        ocrLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                val data = result.data ?: return@registerForActivityResult
-                applyOcrResult(
-                    data.getStringExtra("station"),
-                    data.getDoubleExtra("liters", -1.0).takeIf { it >= 0 },
-                    data.getDoubleExtra("cost", -1.0).takeIf { it >= 0 },
-                    data.getStringExtra("type")
-                )
-            }
-        }
         nearbyStationLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
                 val station = result.data?.getStringExtra(NearbyStationActivity.EXTRA_STATION)?.trim().orEmpty()
@@ -156,12 +118,11 @@ class RecordFragment : Fragment() {
         setupDestinationSuggestions()
         updateEstimateCard()
         updateMiniStats()
-        showLastPhoto()
         updateSmartHint()
         // I13：首次进入且无任何记录时给一次上手引导
         if (records.isEmpty() && !hasShownEmptyGuide) {
             hasShownEmptyGuide = true
-            requireContext().toast("欢迎使用！先拍张小票或手动记一笔，记满 2 次加油就能自动算油耗", long = true)
+            requireContext().toast("欢迎使用！手动记一笔，记满 2 次加油就能自动算油耗", long = true)
         }
     }
 
@@ -177,13 +138,12 @@ class RecordFragment : Fragment() {
         if (manual != null) {
             Analytics.capacityConflictHint(manual, capacity)?.let { smartHint(it); return }
         }
-        val remaining = Analytics.calculateRemainingFuel(records, capacity)
-        if (remaining != null) {
-            val pct = (remaining / capacity * 100).toInt()
-            if (pct <= 15) {
-                smartHint("⚠ 当前油量仅剩约 $pct%，建议尽快加油；勾选「本次加油了」可一键查找附近加油站。")
-                return
-            }
+        val gauge = Analytics.gaugeEstimate(records, Repository.gaugeTotal, Repository.gaugeCurrent, Repository.gaugeCurrentDate)
+        val pct = if (gauge.usable) gauge.percent
+            else Analytics.calculateRemainingFuel(records, capacity)?.let { (it / capacity * 100).toInt() }
+        if (pct != null && pct <= 15) {
+            smartHint("⚠ 当前油量仅剩约 $pct%，建议尽快加油；勾选「本次加油了」可一键查找附近加油站。")
+            return
         }
         smartHint(null)
     }
@@ -281,6 +241,10 @@ class RecordFragment : Fragment() {
             inferTankFromLiters() // I1：按加油量推断是否加满
             updateEstimateCard()
         })
+        // v1.14：填了加油后格数，实时预览格数法估算
+        listOf(binding.gaugeBeforeInput, binding.gaugeAfterInput, binding.gaugeNowInput).forEach {
+            it.addTextChangedListener(simpleTextWatcher { updateEstimateCard() })
+        }
         binding.mileageInput.addTextChangedListener(simpleTextWatcher {
             if (!dateTimeLocked && it.isNotBlank()) {
                 currentDate = Date()
@@ -317,19 +281,28 @@ class RecordFragment : Fragment() {
             updateSmartHint()
         }
 
-        binding.takePhotoBtn.setOnClickListener {
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                launchCamera()
-            } else {
-                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        binding.saveGaugeCurrentBtn.setOnClickListener {
+            val bars = binding.gaugeCurrentInput.doubleOrNull()
+            if (bars == null || bars < 0 || bars > Repository.gaugeTotal) {
+                requireContext().toast("请输入 0 ~ ${Repository.gaugeTotal} 之间的格数")
+                return@setOnClickListener
             }
+            Repository.gaugeCurrent = bars
+            requireContext().toast("当前格数已更新为 $bars 格")
+            updateEstimateCard()
         }
-        binding.uploadPhotoBtn.setOnClickListener { pickImageLauncher.launch("image/*") }
-        binding.retakePhotoBtn.setOnClickListener {
-            binding.cameraPreview.show(false)
-            binding.takePhotoBtn.performClick()
+        binding.saveGaugeTotalBtn.setOnClickListener {
+            val total = binding.gaugeTotalInput.intOrNull()
+            if (total == null || total !in 2..30) {
+                requireContext().toast("请输入 2 ~ 30 之间的总格数")
+                return@setOnClickListener
+            }
+            Repository.gaugeTotal = total
+            // 旧当前格数若超出新范围则清空
+            Repository.gaugeCurrent?.let { if (it > total) Repository.gaugeCurrent = null }
+            requireContext().toast("油表总格数已设置为 $total 格")
+            updateEstimateCard()
         }
-        binding.analyzePhotoBtn.setOnClickListener { launchOcr() }
     }
 
     private fun setupForgot(check: CompoundButton, input: View, error: TextView) {
@@ -404,6 +377,15 @@ class RecordFragment : Fragment() {
         val station = binding.gasStationInput.text.toString().trim()
         val liters = binding.fuelLitersInput.doubleOrNull()
         val cost = binding.fuelCostInput.doubleOrNull()
+        val gaugeBefore = binding.gaugeBeforeInput.doubleOrNull()
+        val gaugeAfter = binding.gaugeAfterInput.doubleOrNull()
+        val gaugeNow = binding.gaugeNowInput.doubleOrNull()
+        val total = Repository.gaugeTotal
+        val badGauge = listOf(gaugeBefore, gaugeAfter, gaugeNow).any { it != null && (it < 0 || it > total) }
+        if (badGauge) {
+            requireContext().toast("格数需在 0 ~ $total 之间")
+            return
+        }
 
         // I3：重复记录检测 —— 用户确认后才继续
         Analytics.detectDuplicateHint(records, currentDate, mileage, refuel)?.let { hint ->
@@ -411,7 +393,7 @@ class RecordFragment : Fragment() {
                 .setTitle("可能是重复记录")
                 .setMessage("$hint\n\n如果确实要记录，请点「仍然保存」。")
                 .setNegativeButton("取消", null)
-                .setPositiveButton("仍然保存") { _, _ -> persistRecord(mileage, destination, refuel, station, liters, cost) }
+                .setPositiveButton("仍然保存") { _, _ -> persistRecord(mileage, destination, refuel, station, liters, cost, gaugeBefore, gaugeAfter, gaugeNow) }
                 .show()
             return
         }
@@ -422,18 +404,18 @@ class RecordFragment : Fragment() {
                     .setTitle("请确认公里数")
                     .setMessage("$hint\n\n确认无误请点「继续保存」。")
                     .setNegativeButton("返回修改", null)
-                    .setPositiveButton("继续保存") { _, _ -> persistRecord(mileage, destination, refuel, station, liters, cost) }
+                    .setPositiveButton("继续保存") { _, _ -> persistRecord(mileage, destination, refuel, station, liters, cost, gaugeBefore, gaugeAfter, gaugeNow) }
                     .show()
                 return
             }
         }
-        persistRecord(mileage, destination, refuel, station, liters, cost)
+        persistRecord(mileage, destination, refuel, station, liters, cost, gaugeBefore, gaugeAfter, gaugeNow)
     }
 
     /** 真正落盘（从 saveRecord 抽出，供智能提示确认后复用） */
     private fun persistRecord(
         mileage: Int?, destination: String, refuel: Boolean, station: String,
-        liters: Double?, cost: Double?
+        liters: Double?, cost: Double?, gaugeBefore: Double?, gaugeAfter: Double?, gaugeNow: Double?
     ) {
         val forgotMileage = binding.forgotMileageCheck.isChecked
         val fuelType = fuelTypeValue(requireContext(), binding.fuelTypeSpinner.selectedItemPosition)
@@ -464,7 +446,8 @@ class RecordFragment : Fragment() {
             .forEach { it.visibility = View.GONE }
 
         val tankStatus = if (binding.tankFullRadio.isChecked) "full" else "partial"
-        val hasFuelData = refuel || station.isNotBlank() || liters != null || cost != null || fuelType.isNotBlank()
+        val hasFuelData = refuel || station.isNotBlank() || liters != null || cost != null ||
+            fuelType.isNotBlank() || gaugeBefore != null || gaugeAfter != null
         val record = FuelRecord(
             id = Analytics.newId(),
             date = dateFormat.format(currentDate),
@@ -473,12 +456,15 @@ class RecordFragment : Fragment() {
             destination = destination,
             isRefuel = refuel,
             tankStatus = tankStatus,
+            gaugeNow = gaugeNow,
             forgottenFields = ForgottenFields(mileage = forgotMileage),
             refuelData = if (hasFuelData) RefuelData(
                 gasStation = if (forgotStation) null else station.ifBlank { null },
                 fuelLiters = if (forgotLiters) null else liters,
                 fuelCost = if (forgotCost) null else cost,
                 fuelType = if (forgotType) null else fuelType.ifBlank { null },
+                gaugeBefore = gaugeBefore,
+                gaugeAfter = gaugeAfter,
                 forgottenFields = ForgottenFuelFields(forgotStation, forgotLiters, forgotCost, forgotType)
             ) else null
         )
@@ -506,6 +492,9 @@ class RecordFragment : Fragment() {
         binding.gasStationInput.text?.clear()
         binding.fuelLitersInput.text?.clear()
         binding.fuelCostInput.text?.clear()
+        binding.gaugeBeforeInput.text?.clear()
+        binding.gaugeAfterInput.text?.clear()
+        binding.gaugeNowInput.text?.clear()
         binding.fuelTypeSpinner.setSelection(0)
         listOf(
             binding.forgotGasStationCheck, binding.forgotFuelLitersCheck,
@@ -528,38 +517,100 @@ class RecordFragment : Fragment() {
     }
 
     private fun updateEstimateCard() {
+        if (_binding == null) return
         if (records.isEmpty()) {
             binding.fuelEstimateCard.show(false)
             return
         }
-        val avg = Analytics.calculateFuelConsumption(records)
-        if (avg == null) {
-            binding.fuelEstimateCard.show(false)
-            return
-        }
-        binding.fuelEstimateCard.show(true)
-
         val estimated = Analytics.estimateTankCapacity(records)
         val capacity = Repository.tankCapacity.takeIf { it in 20..200 } ?: estimated
-        binding.estimatedTankCapacityText.text = "估算油箱容量: $estimated 升"
+
+        // 把表单里正在填的格数作为一条虚拟记录纳入估算，实现"边填边预览"
+        val algoRecords = records.toMutableList()
+        val formBefore = binding.gaugeBeforeInput.doubleOrNull()
+        val formAfter = binding.gaugeAfterInput.doubleOrNull()
+        val formNow = binding.gaugeNowInput.doubleOrNull()
+        if (formBefore != null || formAfter != null || formNow != null) {
+            algoRecords.add(
+                FuelRecord(
+                    id = "__form_preview__", date = Analytics.formatDateTime(Date()),
+                    mileage = binding.mileageInput.intOrNull(),
+                    isRefuel = binding.refuelCheck.isChecked,
+                    gaugeNow = formNow,
+                    refuelData = com.youjixingtu.app.model.RefuelData(
+                        fuelLiters = binding.fuelLitersInput.doubleOrNull(),
+                        fuelCost = binding.fuelCostInput.doubleOrNull(),
+                        gaugeBefore = formBefore, gaugeAfter = formAfter
+                    )
+                )
+            )
+        }
+
+        val gauge = Analytics.gaugeEstimate(
+            algoRecords, Repository.gaugeTotal,
+            Repository.gaugeCurrent, Repository.gaugeCurrentDate
+        )
+
+        binding.fuelEstimateCard.show(true)
+        if (!binding.manualTankCapacityInput.text.isNullOrBlank()) {
+            // 保留用户输入
+        }
+
+        if (gauge.usable) {
+            // ===== 格数法（用户习惯：平时部分加油，越加越准）=====
+            val remaining = gauge.remainingLiters!!
+            val cap = gauge.capacityLiters ?: capacity.toDouble()
+            binding.estimatedFuelText.text = "${formatNumber(remaining, 1)} 升"
+            val pct = gauge.percent ?: ((remaining / cap * 100).toInt().coerceIn(0, 100))
+            binding.fuelGauge.progress = pct
+            binding.fuelPercentText.text = "$pct%"
+            binding.remainingDistanceText.text = gauge.remainingKm?.let { "可行驶距离: $it 公里" }
+                ?: "可行驶距离: -- 公里"
+            binding.remainingValueText.text = gauge.remainingCost?.let { "当前油量价值: ${formatNumber(it, 1)} 元" }
+                ?: "当前油量价值: -- 元"
+            binding.estimatedTankCapacityText.text = "估算油箱容量: ${formatNumber(cap, 1)} 升（${gauge.totalBars} 格）"
+            // 每格数据 + 样本数，体现"越用越准"
+            val parts = mutableListOf<String>()
+            gauge.litersPerBar?.let { parts.add("每格约 ${formatNumber(it, 2)} 升") }
+            gauge.kmPerBar?.let { parts.add("${formatNumber(it, 1)} 公里/格") }
+            gauge.costPerBar?.let { parts.add("${formatNumber(it, 1)} 元/格") }
+            parts.add("已积累 ${gauge.sampleCount} 个格数样本，越多越准")
+            binding.gaugeDetailText.visibility = View.VISIBLE
+            binding.gaugeDetailText.text = parts.joinToString(" · ")
+        } else {
+            // ===== 旧算法兜底（无格数样本的历史记录）=====
+            binding.gaugeDetailText.visibility = View.GONE
+            binding.remainingValueText.text = "当前油量价值: -- 元"
+            binding.estimatedTankCapacityText.text = "估算油箱容量: $estimated 升"
+            val avg = Analytics.calculateFuelConsumption(records)
+            if (avg == null) {
+                binding.estimatedFuelText.text = "-- 升"
+                binding.fuelGauge.progress = 0
+                binding.fuelPercentText.text = "0%"
+                binding.remainingDistanceText.text = "可行驶距离: -- 公里"
+                return
+            }
+            val remaining = Analytics.calculateRemainingFuel(records, capacity)
+            if (remaining == null) {
+                binding.estimatedFuelText.text = "-- 升"
+                binding.fuelGauge.progress = 0
+                binding.fuelPercentText.text = "0%"
+                binding.remainingDistanceText.text = "可行驶距离: -- 公里"
+                return
+            }
+            binding.estimatedFuelText.text = "${formatNumber(remaining, 1)} 升"
+            val percentage = ((remaining / capacity) * 100).coerceAtMost(100.0).toInt()
+            binding.fuelGauge.progress = percentage
+            binding.fuelPercentText.text = "$percentage%"
+            val distance = remaining / avg * 100
+            binding.remainingDistanceText.text = "可行驶距离: ${distance.toInt()} 公里"
+        }
         if (binding.manualTankCapacityInput.text.isNullOrBlank()) {
             binding.manualTankCapacityInput.setText(capacity.toString())
         }
-
-        val remaining = Analytics.calculateRemainingFuel(records, capacity)
-        if (remaining == null) {
-            binding.estimatedFuelText.text = "-- 升"
-            binding.fuelGauge.progress = 0
-            binding.fuelPercentText.text = "0%"
-            binding.remainingDistanceText.text = "可行驶距离: -- 公里"
-            return
+        if (binding.gaugeTotalInput.text.isNullOrBlank()) {
+            binding.gaugeTotalInput.setText(Repository.gaugeTotal.toString())
         }
-        binding.estimatedFuelText.text = "${formatNumber(remaining, 1)} 升"
-        val percentage = ((remaining / capacity) * 100).coerceAtMost(100.0).toInt()
-        binding.fuelGauge.progress = percentage
-        binding.fuelPercentText.text = "$percentage%"
-        val distance = remaining / avg * 100
-        binding.remainingDistanceText.text = "可行驶距离: ${distance.toInt()} 公里"
     }
 
     private fun updateMiniStats() {
@@ -569,76 +620,4 @@ class RecordFragment : Fragment() {
         binding.monthDistanceText.text = stats.monthDistance?.toString() ?: "--"
     }
 
-    private fun launchCamera() {
-        val dir = File(requireContext().filesDir, "photos").apply { mkdirs() }
-        val file = File(dir, "photo_${System.currentTimeMillis()}.jpg")
-        currentPhotoPath = file.absolutePath
-        val uri = FileProvider.getUriForFile(requireContext(), "${requireContext().packageName}.fileprovider", file)
-        takePictureLauncher.launch(uri)
-    }
-
-    private fun copyGalleryImage(uri: Uri) {
-        try {
-            val dir = File(requireContext().filesDir, "photos").apply { mkdirs() }
-            val file = File(dir, "gallery_${System.currentTimeMillis()}.jpg")
-            requireContext().contentResolver.openInputStream(uri)?.use { input ->
-                file.outputStream().use { output -> input.copyTo(output) }
-            }
-            onPhotoReady(file.absolutePath)
-        } catch (e: Exception) {
-            requireContext().toast("读取照片失败：${e.message ?: "未知错误"}")
-        }
-    }
-
-    private fun onPhotoReady(path: String) {
-        val photos = Repository.loadPhotos()
-        if (photos.size >= 10) {
-            // B4：移除列表时同步删除实际图片文件，避免 filesDir/photos 无限累积
-            val removed = photos.removeAt(0)
-            runCatching { File(removed.path).delete() }
-        }
-        photos.add(CameraPhoto(System.currentTimeMillis(), path, dateFormat.format(Date())))
-        Repository.savePhotos(photos)
-        currentPhotoPath = path
-        binding.photoPreview.setImageURI(Uri.fromFile(File(path)))
-        binding.cameraPreview.show(true)
-    }
-
-    private fun showLastPhoto() {
-        val last = Repository.loadPhotos().lastOrNull()
-        if (last != null && File(last.path).exists()) {
-            currentPhotoPath = last.path
-            binding.photoPreview.setImageURI(Uri.fromFile(File(last.path)))
-            binding.cameraPreview.show(true)
-        }
-    }
-
-    private fun launchOcr() {
-        val path = currentPhotoPath
-        if (path == null || !File(path).exists()) {
-            requireContext().toast("请先拍摄或上传照片")
-            return
-        }
-        val intent = Intent(requireContext(), OcrActivity::class.java).apply {
-            putExtra("photo_path", path)
-        }
-        ocrLauncher.launch(intent)
-    }
-
-    private fun applyOcrResult(station: String?, liters: Double?, cost: Double?, type: String?) {
-        // A1：程序化勾选时抑制附近站弹页，OCR 结果不应被打断
-        suppressStationPrompt = true
-        binding.refuelCheck.isChecked = true
-        suppressStationPrompt = false
-        binding.fuelDetailsLayout.show(true)
-        if (!station.isNullOrBlank()) {
-            binding.gasStationInput.setText(station)
-            if (binding.destinationInput.text.isNullOrBlank()) binding.destinationInput.setText(station)
-        }
-        if (liters != null) binding.fuelLitersInput.setText(liters.toString())
-        if (cost != null) binding.fuelCostInput.setText(cost.toString())
-        if (!type.isNullOrBlank()) binding.fuelTypeSpinner.setSelection(fuelTypePosition(requireContext(), type))
-        // A4：油箱状态不再由金额推断，保持默认「加满」，用户可自行改
-        requireContext().toast("信息已自动填充，请检查并完善其他字段", long = true)
-    }
 }

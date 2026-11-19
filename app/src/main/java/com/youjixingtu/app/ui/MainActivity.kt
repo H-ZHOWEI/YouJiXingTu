@@ -105,15 +105,23 @@ class MainActivity : AppCompatActivity() {
         if (records.isEmpty()) return
         val capacity = Repository.tankCapacity.takeIf { it in 20..200 }
             ?: Analytics.estimateTankCapacity(records)
-        val remaining = Analytics.calculateRemainingFuel(records, capacity) ?: return
-        val pct = remaining / capacity * 100
+        val gauge = Analytics.gaugeEstimate(records, Repository.gaugeTotal, Repository.gaugeCurrent, Repository.gaugeCurrentDate)
+        val pct: Int
+        val km: Int?
+        if (gauge.usable) {
+            pct = gauge.percent ?: return
+            km = gauge.remainingKm
+        } else {
+            val remaining = Analytics.calculateRemainingFuel(records, capacity) ?: return
+            pct = (remaining / capacity * 100).toInt()
+            km = Analytics.predictNextRefuel(records, capacity)?.km
+        }
         if (pct > 15) return
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         if (Repository.lowFuelNoticeDay == today) return
-        val km = Analytics.predictNextRefuel(records, capacity)?.km
         binding.lowFuelBannerText.text = if (km != null)
-            "⚠ 油量仅剩约 ${pct.toInt()}%，预计还能跑 $km 公里，建议尽快加油"
-        else "⚠ 油量仅剩约 ${pct.toInt()}%，建议尽快加油"
+            "⚠ 油量仅剩约 $pct%，预计还能跑 $km 公里，建议尽快加油"
+        else "⚠ 油量仅剩约 $pct%，建议尽快加油"
         binding.lowFuelBanner.visibility = View.VISIBLE
     }
 

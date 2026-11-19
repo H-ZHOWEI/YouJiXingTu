@@ -51,6 +51,13 @@
                     <RadioButton android:id="@+id/editTankFullRadio" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:checked="true" android:text="加满" android:textColor="@color/light" android:textSize="13sp" />
                     <RadioButton android:id="@+id/editTankPartialRadio" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="部分加油" android:textColor="@color/light" android:textSize="13sp" />
                 </RadioGroup>
+
+                <TextView style="@style/LabelText" android:layout_marginTop="8dp" android:text="油表格数（选填）" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:orientation="horizontal">
+                    <EditText android:id="@+id/editGaugeBeforeInput" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:background="@drawable/bg_field" android:hint="加油前格数" android:inputType="numberDecimal" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="13sp" />
+                    <EditText android:id="@+id/editGaugeAfterInput" android:layout_width="0dp" android:layout_height="40dp" android:layout_marginStart="8dp" android:layout_weight="1" android:background="@drawable/bg_field" android:hint="加油后格数" android:inputType="numberDecimal" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="13sp" />
+                </LinearLayout>
+                <EditText android:id="@+id/editGaugeNowInput" android:layout_width="match_parent" android:layout_height="40dp" android:layout_marginTop="8dp" android:background="@drawable/bg_field" android:hint="当前格数（选填）" android:inputType="numberDecimal" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="13sp" />
             </LinearLayout>
 
             <TextView style="@style/LabelText" android:layout_marginTop="8dp" android:text="去了哪里 *" />

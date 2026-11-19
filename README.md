@@ -11,14 +11,15 @@
 | 加油信息、油品、油箱状态 | 原生表单 + Spinner + RadioGroup |
 | 里程校验（同日顺序、跨日最大值） | `Analytics.validateMileage` |
 | 平均油耗 / 剩余油量 / 可行驶距离 / 油箱容量估算 | `Analytics` 按旧版公式移植 |
-| 拍照、相册、文本提取 | 原生相机 + FileProvider + ML Kit 中文离线 OCR（结果可编辑） |
+| 油表格数估算（v1.14） | 按加油前后格数推算每格升数/公里/钱，样本越多越准；总格数可配，无格数时回退旧算法 |
+| 拍照、相册、文本提取 | v1.14 已移除（识别不准，改纯手动录入） |
 | 勾选加油选加油站 | 高德定位 + 5 公里内 POI 周边搜索，点选自动填入（需自行配 Key） |
 | 本周/本月/本年/全部统计、数据质量、空档提示 | `StatsFragment` |
 | 加油站对比与评分 | `StationsFragment` |
 | 导入导出、备份、冗余清理、分页 | `HistoryFragment` |
 | 星空主题、应用图标 | `StarFieldView` + 原版图标 |
 | 版本更新 | 启动/手动检查 GitHub Release，多镜像下载安装（横幅只显示当前版本说明，v1.13） |
-| 智能化提示（v1.12，15 项） | 加满/油品自动推断、常用地点补全、重复与异常录入确认、OCR 单价校验与反推、低油量主动提醒、下次加油预测、异常油耗与数据质量建议 |
+| 智能化提示（v1.12，15 项） | 加满/油品自动推断、常用地点补全、重复与异常录入确认、低油量主动提醒、下次加油预测、异常油耗与数据质量建议（OCR 相关项随拍照功能在 v1.14 移除） |
 
 ## 目录结构
 
@@ -27,7 +28,7 @@ app/src/main/java/com/youjixingtu/app/
   YouJiApp.kt              应用入口，初始化仓库、高德隐私合规与 Key 注入（v1.10）
   model/Records.kt         与旧版 JSON 兼容的数据模型
   data/Repository.kt       SharedPreferences 存储/备份/照片
-  core/Analytics.kt        全部统计与校验算法（剩余油量按加满满箱正序推算，v1.11 修复常年为 0）
+  core/Analytics.kt        全部统计与校验算法（v1.11 剩余油量按加满正序推算；v1.14 新增油表格数法 gaugeEstimate，越用越准）
   ui/                      MainActivity 与四个页签、编辑页、OCR 页、附近加油站选择页
   util/UpdateManager.kt    版本更新
   util/TextExtractHelper.kt 小票文本提取

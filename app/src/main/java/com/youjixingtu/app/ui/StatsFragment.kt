@@ -88,7 +88,9 @@ class StatsFragment : Fragment() {
         // I9：下次加油预测
         val capacity = Repository.tankCapacity.takeIf { it in 20..200 }
             ?: Analytics.estimateTankCapacity(records)
-        val prediction = Analytics.predictNextRefuel(records, capacity)
+        val prediction = Analytics.predictNextRefuel(
+            records, capacity, Repository.gaugeTotal, Repository.gaugeCurrent, Repository.gaugeCurrentDate
+        )
         binding.nextRefuelText.text = prediction?.let { "🔮 下次加油预测：${it.message}" }
             ?: "🔮 下次加油预测：数据不足，多记几次加油后可预测"
 

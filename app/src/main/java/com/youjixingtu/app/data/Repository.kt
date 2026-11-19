@@ -27,6 +27,9 @@ object Repository {
     const val KEY_LOC_LNG = "lastLocLng"
     const val KEY_LOC_TIME = "lastLocTime"
     const val KEY_LOW_FUEL_NOTICE_DAY = "lowFuelNoticeDay"
+    const val KEY_GAUGE_TOTAL = "gaugeTotal"
+    const val KEY_GAUGE_CURRENT = "gaugeCurrent"
+    const val KEY_GAUGE_CURRENT_DATE = "gaugeCurrentDate"
 
     private var appContext: Context? = null
     private val gson: Gson = GsonBuilder().serializeNulls().create()
@@ -176,6 +179,30 @@ object Repository {
     var lowFuelNoticeDay: String
         get() = prefs.getString(KEY_LOW_FUEL_NOTICE_DAY, "") ?: ""
         set(value) { prefs.edit().putString(KEY_LOW_FUEL_NOTICE_DAY, value).apply() }
+
+    /** v1.14：油表总格数（默认 12），用于格数法估算 */
+    var gaugeTotal: Int
+        get() = prefs.getInt(KEY_GAUGE_TOTAL, 12).coerceIn(2, 30)
+        set(value) { prefs.edit().putInt(KEY_GAUGE_TOTAL, value.coerceIn(2, 30)).apply() }
+
+    /** v1.14：用户最近一次单独更新的「当前油表格数」；null 表示用加油记录里的 gaugeAfter 推算 */
+    var gaugeCurrent: Double?
+        get() {
+            val v = prefs.getFloat(KEY_GAUGE_CURRENT, -1f)
+            return if (v >= 0f) v.toDouble() else null
+        }
+        set(value) {
+            val e = prefs.edit()
+            if (value == null) e.remove(KEY_GAUGE_CURRENT).remove(KEY_GAUGE_CURRENT_DATE)
+            else e.putFloat(KEY_GAUGE_CURRENT, value.toFloat())
+                .putString(KEY_GAUGE_CURRENT_DATE, com.youjixingtu.app.core.Analytics.formatDateTime(java.util.Date()))
+            e.apply()
+        }
+
+    /** 当前格数更新时间（yyyy-MM-dd'T'HH:mm），用于判断是否需要按里程继续扣减 */
+    var gaugeCurrentDate: String
+        get() = prefs.getString(KEY_GAUGE_CURRENT_DATE, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_GAUGE_CURRENT_DATE, value).apply() }
 
     fun loadPhotos(): MutableList<CameraPhoto> {
         val stored = prefs.getString(KEY_CAMERA_PHOTOS, null)

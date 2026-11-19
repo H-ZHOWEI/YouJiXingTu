@@ -584,11 +584,25 @@ object Analytics {
 
     data class RefuelPrediction(val message: String, val days: Int?, val km: Int?)
 
-    /** I9：下次加油预测——剩余油量按油耗折算可行驶公里，再按个人加油习惯折算天数 */
-    fun predictNextRefuel(records: List<FuelRecord>, tankCapacity: Int): RefuelPrediction? {
-        val remaining = calculateRemainingFuel(records, tankCapacity) ?: return null
-        val consumption = calculateFuelConsumption(records) ?: return null
-        val km = (remaining / consumption * 100).toInt()
+    /** I9：下次加油预测——优先用格数法的每格公里，否则用油耗折算；再按个人习惯折算天数 */
+    fun predictNextRefuel(
+        records: List<FuelRecord>, tankCapacity: Int,
+        gaugeTotal: Int = 12, manualCurrentBars: Double? = null, manualCurrentDate: String? = null
+    ): RefuelPrediction? {
+        val gauge = gaugeEstimate(records, gaugeTotal, manualCurrentBars, manualCurrentDate)
+        val remaining: Double
+        val km: Int
+        if (gauge.usable) {
+            remaining = gauge.remainingLiters!!
+            km = gauge.remainingKm ?: run {
+                val c = calculateFuelConsumption(records) ?: return null
+                (remaining / c * 100).toInt()
+            }
+        } else {
+            remaining = calculateRemainingFuel(records, tankCapacity) ?: return null
+            val consumption = calculateFuelConsumption(records) ?: return null
+            km = (remaining / consumption * 100).toInt()
+        }
         val habits = refuelHabits(records)
         val days = if (habits.avgAmount > 0 && habits.avgIntervalDays > 0)
             (remaining / habits.avgAmount * habits.avgIntervalDays).toInt() else null
@@ -647,6 +661,191 @@ object Analytics {
             .groupingBy { it }.eachCount()
             .entries.sortedByDescending { it.value }
             .take(limit).map { it.key }
+
+    // ==================== v1.14 油表格数法估算 ====================
+
+    /** 一格数据样本来源标注，便于界面展示"越用越准" */
+    data class GaugeSample(val bars: Double, val liters: Double?, val cost: Double?, val date: String, val source: String)
+
+    /**
+     * 格数法估算结果。
+     * litersPerBar/kmPerBar/costPerBar 为 null 表示该类样本不足，调用方应回退旧算法。
+     * sampleCount 越大越精确（多样本加权平均）。
+     */
+    data class GaugeEstimate(
+        val litersPerBar: Double?,
+        val kmPerBar: Double?,
+        val costPerBar: Double?,
+        val currentBars: Double?,
+        val sampleCount: Int,
+        val kmSampleCount: Int,
+        val totalBars: Int,
+        val basis: String
+    ) {
+        /** 当前剩余油量（升） */
+        val remainingLiters: Double?
+            get() = if (litersPerBar != null && currentBars != null) (litersPerBar * currentBars).coerceAtLeast(0.0) else null
+        /** 估算油箱容量（升）= 每格升数 × 总格数 */
+        val capacityLiters: Double?
+            get() = litersPerBar?.let { it * totalBars }
+        /** 可行驶公里 = 当前格数 × 每格公里 */
+        val remainingKm: Int?
+            get() = if (kmPerBar != null && currentBars != null) (kmPerBar * currentBars).toInt().coerceAtLeast(0) else null
+        /** 当前油量价值（元） */
+        val remainingCost: Double?
+            get() = if (costPerBar != null && currentBars != null) (costPerBar * currentBars).coerceAtLeast(0.0) else null
+        val percent: Int?
+            get() = currentBars?.let { (it / totalBars * 100).toInt().coerceIn(0, 100) }
+        val usable: Boolean
+            get() = litersPerBar != null && currentBars != null
+    }
+
+    /**
+     * 油表格数法主算法——用户平时多为部分加油，故不再以"是否加满"为基准，
+     * 而以"油表格数"为标尺：每次加油记下前后格数，样本越多，每格升数/公里/钱越精确。
+     *
+     * @param records 全部记录
+     * @param totalBars 油表总格数
+     * @param manualCurrentBars 用户单独更新的当前格数（优先）
+     */
+    fun gaugeEstimate(
+        records: List<FuelRecord>,
+        totalBars: Int,
+        manualCurrentBars: Double? = null,
+        manualCurrentDate: String? = null
+    ): GaugeEstimate {
+        if (totalBars <= 0) return GaugeEstimate(null, null, null, null, 0, 0, totalBars, "总格数无效")
+        val sorted = records.sortedBy { parseDate(it.date) }
+
+        // ---------- 1. 收集"每格升数/钱数"样本 ----------
+        // 来源A：加油记录的前后格数差 → 加了 N 格、用了 L 升、花了 C 元
+        val literSamples = mutableListOf<GaugeSample>()
+        sorted.forEach { r ->
+            val f = r.refuelData ?: return@forEach
+            if (!r.isRefuel || f.forgottenFields?.fuelLiters == true) return@forEach
+            val liters = f.fuelLiters?.takeIf { it > 0 } ?: return@forEach
+            val before = f.gaugeBefore?.takeIf { it >= 0 }
+            val after = f.gaugeAfter?.takeIf { it >= 0 }
+            if (before != null && after != null && after - before > 0.05) {
+                val bars = after - before
+                literSamples.add(
+                    GaugeSample(
+                        bars, liters, f.fuelCost?.takeIf { (it ?: 0.0) > 0 },
+                        r.date, "加油前后格数"
+                    )
+                )
+            }
+        }
+        // 来源B：某条记录填了"当前格数"，且它是一条加油记录 —— 用上一条已知格数点推算加了几格
+        // （适配"每笔只填当前格数"的录法：相邻两笔格数差 = 这次加的格数）
+        for (i in 1 until sorted.size) {
+            val cur = sorted[i]
+            val f = cur.refuelData
+            val curBars = cur.gaugeNow ?: f?.gaugeAfter
+            if (cur.isRefuel && f != null && f.forgottenFields?.fuelLiters != true && curBars != null) {
+                val liters = f.fuelLiters?.takeIf { it > 0 } ?: continue
+                // 向前找最近一个已知格数点（且低于当前，表示加油前）
+                var prevBars: Double? = null
+                for (j in i - 1 downTo 0) {
+                    val p = sorted[j]
+                    val b = p.gaugeNow ?: p.refuelData?.gaugeAfter
+                    if (b != null && b < curBars - 0.05) { prevBars = b; break }
+                }
+                if (prevBars != null && curBars - prevBars > 0.05) {
+                    val bars = curBars - prevBars
+                    // 避免与来源A重复：同一条若已按前后格数计入则跳过
+                    val alreadyCounted = literSamples.any { it.date == cur.date }
+                    if (!alreadyCounted) {
+                        literSamples.add(GaugeSample(bars, liters, f.fuelCost?.takeIf { (it ?: 0.0) > 0 }, cur.date, "相邻格数差"))
+                    }
+                }
+            }
+        }
+
+        // 加权平均：Σ升数 / Σ格数（样本越多越稳）
+        val totalBarsAdded = literSamples.sumOf { it.bars }
+        val totalLiters = literSamples.mapNotNull { it.liters }.sum()
+        val costSamples = literSamples.filter { it.cost != null }
+        val totalCost = costSamples.sumOf { it.cost!! }
+        val costBars = costSamples.sumOf { it.bars }
+        val litersPerBar = if (totalBarsAdded > 0 && totalLiters > 0) totalLiters / totalBarsAdded else null
+        val costPerBar = if (costBars > 0 && totalCost > 0) totalCost / costBars else null
+
+        // ---------- 2. 当前格数 ----------
+        // 优先级：用户单独更新 > 最近一条加油的 gaugeAfter > 最近一条 gaugeNow
+        val manual = manualCurrentBars?.takeIf { it in 0.0..totalBars.toDouble() }
+        val latestAfter = sorted.indexOfLast {
+            (it.refuelData?.gaugeAfter ?: it.gaugeNow) != null
+        }.takeIf { it >= 0 }?.let { idx ->
+            val r = sorted[idx]
+            Pair(r.refuelData?.gaugeAfter ?: r.gaugeNow, r.date)
+        }
+        var currentBars: Double? = manual
+        var basis = when {
+            manual != null -> "按你更新的当前格数"
+            latestAfter != null -> "按最近一次记录的格数"
+            else -> "缺少格数数据"
+        }
+
+        // ---------- 3. 每格公里（相邻格数点间的里程差 ÷ 格数消耗）----------
+        // 构造按时间排序的格数点：(里程, 格数, 日期)
+        val points = mutableListOf<Triple<Int, Double, String>>()
+        sorted.forEach { r ->
+            val m = r.mileage?.takeIf { !r.mileageForgotten && it > 0 } ?: return@forEach
+            r.refuelData?.gaugeBefore?.let { points.add(Triple(m, it, r.date)) }
+            r.refuelData?.gaugeAfter?.let { points.add(Triple(m, it, r.date)) }
+            r.gaugeNow?.let { points.add(Triple(m, it, r.date)) }
+        }
+        // manualCurrentDate 若给出，作为额外点（里程取该日期之前最近一条里程）
+        if (manual != null && !manualCurrentDate.isNullOrBlank()) {
+            val m = sorted.filter { !it.mileageForgotten && it.mileage != null && parseDate(it.date) <= parseDate(manualCurrentDate) }
+                .maxByOrNull { it.mileage ?: 0 }?.mileage
+            if (m != null) points.add(Triple(m, manual, manualCurrentDate))
+        }
+        val pts = points.sortedBy { parseDate(it.third) }
+        var kmNum = 0.0
+        var kmDen = 0.0
+        var kmSampleCount = 0
+        for (i in 1 until pts.size) {
+            val prev = pts[i - 1]
+            val cur = pts[i]
+            val dm = cur.first - prev.first
+            val db = prev.second - cur.second // 格数下降=消耗
+            if (dm > 0 && db > 0.05 && db <= totalBars) {
+                kmNum += dm
+                kmDen += db
+                kmSampleCount++
+            }
+        }
+        val kmPerBar = if (kmDen > 0 && kmNum > 0) kmNum / kmDen else null
+
+        // 若当前格数来自历史记录，按其后新增里程继续扣减，保持"当前"含义
+        if (currentBars != null && kmPerBar != null && kmPerBar > 0) {
+            val baseDate = manualCurrentDate ?: latestAfter?.second
+            if (!baseDate.isNullOrBlank()) {
+                val baseMileage = sorted.filter { !it.mileageForgotten && it.mileage != null && parseDate(it.date) <= parseDate(baseDate) }
+                    .maxByOrNull { it.mileage ?: 0 }?.mileage
+                val latestMileage = sorted.filter { !it.mileageForgotten && it.mileage != null }
+                    .maxByOrNull { it.mileage ?: 0 }?.mileage
+                if (baseMileage != null && latestMileage != null && latestMileage > baseMileage) {
+                    val consumedBars = (latestMileage - baseMileage).toDouble() / kmPerBar
+                    currentBars = (currentBars - consumedBars).coerceAtLeast(0.0)
+                    basis += "，并按之后里程继续推算"
+                }
+            }
+        }
+
+        return GaugeEstimate(
+            litersPerBar = litersPerBar,
+            kmPerBar = kmPerBar,
+            costPerBar = costPerBar,
+            currentBars = currentBars,
+            sampleCount = literSamples.size,
+            kmSampleCount = kmSampleCount,
+            totalBars = totalBars,
+            basis = basis
+        )
+    }
 
     /** 生成唯一 ID，格式与旧版类似 */
     fun newId(): String =
