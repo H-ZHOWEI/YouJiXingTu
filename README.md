@@ -11,7 +11,8 @@
 | 加油信息、油品、油箱状态 | 原生表单 + Spinner + RadioGroup |
 | 里程校验（同日顺序、跨日最大值） | `Analytics.validateMileage` |
 | 平均油耗 / 剩余油量 / 可行驶距离 / 油箱容量估算 | `Analytics` 按旧版公式移植 |
-| 拍照、相册、文本提取 | 原生相机 + FileProvider + 可编辑小票文本提取 |
+| 拍照、相册、文本提取 | 原生相机 + FileProvider + ML Kit 中文离线 OCR（结果可编辑） |
+| 勾选加油选加油站 | 高德定位 + 5 公里内 POI 周边搜索，点选自动填入（需自行配 Key） |
 | 本周/本月/本年/全部统计、数据质量、空档提示 | `StatsFragment` |
 | 加油站对比与评分 | `StationsFragment` |
 | 导入导出、备份、冗余清理、分页 | `HistoryFragment` |
@@ -26,9 +27,10 @@ app/src/main/java/com/youjixingtu/app/
   model/Records.kt         与旧版 JSON 兼容的数据模型
   data/Repository.kt       SharedPreferences 存储/备份/照片
   core/Analytics.kt        全部统计与校验算法
-  ui/                      MainActivity 与四个页签、编辑页、OCR 页
+  ui/                      MainActivity 与四个页签、编辑页、OCR 页、附近加油站选择页
   util/UpdateManager.kt    版本更新
   util/TextExtractHelper.kt 小票文本提取
+  (高德 SDK 接入在 ui/NearbyStationActivity.kt，Key 占位符在 AndroidManifest.xml)
 app/src/main/res/          布局、主题、图标、FileProvider 配置
 ```
 
@@ -51,6 +53,10 @@ app/src/main/res/          布局、主题、图标、FileProvider 配置
 - Release 正文取 `CHANGELOG.md` 对应版本段落。
 - 更新逻辑沿用既定规则：每次打开检查、失败不写冷却、非模态横幅、跳过只对该版本且只对启动检查生效、下载多镜像重试并按大小校验、安装走 FileProvider。
 
+## 附近加油站（高德 Key）
+
+勾选「本次加油了」会弹出附近加油站选择页，用高德 SDK 定位并搜索 5 公里内的加油站。按合规要求软件不内置任何地图 Key，首次使用需自行到 <https://console.amap.com> 免费申请 Android 平台 Key，填入 `app/src/main/AndroidManifest.xml` 中 `com.amap.api.v2.apikey` 的 `android:value`（当前为占位符）。申请时包名填 `com.youjixingtu.app`，调试签名 SHA1 为 `98:52:6E:3A:80:E5:2A:60:E8:59:49:CC:0C:94:E5:9F:98:4C:D0:83`。详细步骤见《操作说明》第八节。不配 Key 不影响其它功能，只是附近加油站列表为空、需手动输入站名。
+
 ## 说明
 
-旧版本身的「提取信息」就是模拟识别（写死了一张示例小票文本）。新版保留该行为，但把文本做成**可编辑**：你可以按真实小票修改后再提取，规则与原版完全一致。后续若要接真实 OCR，只需替换 `OcrActivity` 中预填文本的逻辑。
+小票识别用 Google ML Kit 中文离线 OCR 在手机本地完成，不联网、免费；识别出的文字可在页面上修改后再提取字段，提取规则与旧版一致。

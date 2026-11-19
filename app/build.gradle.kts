@@ -10,8 +10,8 @@ android {
         applicationId = "com.youjixingtu.app"
         minSdk = 24
         targetSdk = 37
-        versionCode = 6
-        versionName = "1.5"
+        versionCode = 7
+        versionName = "1.6"
         vectorDrawables.useSupportLibrary = true
         // 真机只需 ARM 架构；排除 x86/x86_64 可省约 22MB（OCR 引擎 so）
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
@@ -62,4 +62,8 @@ dependencies {
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
     // ML Kit 需要 image 标签（Task API 图片输入）
     implementation("androidx.exifinterface:exifinterface:1.3.7")
+    // 高德定位 + 周边 POI 搜索（合规境内地图服务；key 以占位符写在 Manifest，由使用者自行申请）
+    // 固定为配套版本，避免 location 与 search 内嵌的 amap-util 基础类重复导致编译冲突
+    implementation("com.amap.api:location:6.4.2")
+    implementation("com.amap.api:search:9.7.0")
 }

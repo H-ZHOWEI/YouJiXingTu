@@ -3,9 +3,12 @@ package com.youjixingtu.app.ui
 import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.CompoundButton
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.youjixingtu.app.core.Analytics
 import com.youjixingtu.app.data.Repository
@@ -25,11 +28,21 @@ class EditRecordActivity : AppCompatActivity() {
     private lateinit var records: MutableList<com.youjixingtu.app.model.FuelRecord>
     private var currentDate = Date()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
+    private lateinit var nearbyStationLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityEditRecordBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        nearbyStationLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val station = result.data?.getStringExtra(NearbyStationActivity.EXTRA_STATION)?.trim().orEmpty()
+                if (station.isNotBlank()) applyPickedStation(station)
+            }
+        }
 
         recordId = intent.getStringExtra("record_id") ?: ""
         records = Repository.loadRecords().toMutableList()
@@ -76,6 +89,14 @@ class EditRecordActivity : AppCompatActivity() {
         setupListeners()
     }
 
+    /** 将选中的加油站填入「加油站名称」与「去了哪里」 */
+    private fun applyPickedStation(station: String) {
+        binding.editGasStationInput.setText(station)
+        binding.editDestinationInput.setText(station)
+        Repository.lastGasStation = station
+        toast("已填入：$station，可修改", long = true)
+    }
+
     private fun setupListeners() {
         binding.editDateBtn.setOnClickListener { showDatePicker() }
 
@@ -88,14 +109,9 @@ class EditRecordActivity : AppCompatActivity() {
         binding.editRefuelCheck.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
             binding.editFuelDetailsLayout.show(checked)
             if (checked) {
-                val lastStation = Repository.lastGasStation
-                if (binding.editGasStationInput.text?.isNotBlank() != true && lastStation.isNotBlank()) {
-                    binding.editGasStationInput.setText(lastStation)
-                    toast("已填入最近加油站：$lastStation，可修改")
-                }
-                if (binding.editDestinationInput.text?.isBlank() == true && binding.editGasStationInput.text?.isNotBlank() == true) {
-                    binding.editDestinationInput.setText(binding.editGasStationInput.text.toString())
-                }
+                // 勾选「本次加油了」：弹出附近加油站（5 公里）让用户选择，选中后自动填入
+                val intent = Intent(this, NearbyStationActivity::class.java)
+                nearbyStationLauncher.launch(intent)
             }
         }
         binding.editGasStationInput.addTextChangedListener(simpleTextWatcher { text ->

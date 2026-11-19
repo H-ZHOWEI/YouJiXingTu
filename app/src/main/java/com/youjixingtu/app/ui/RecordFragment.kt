@@ -55,6 +55,7 @@ class RecordFragment : Fragment() {
     private lateinit var takePictureLauncher: ActivityResultLauncher<Uri>
     private lateinit var pickImageLauncher: ActivityResultLauncher<String>
     private lateinit var ocrLauncher: ActivityResultLauncher<Intent>
+    private lateinit var nearbyStationLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,6 +79,22 @@ class RecordFragment : Fragment() {
                 )
             }
         }
+        nearbyStationLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val station = result.data?.getStringExtra(NearbyStationActivity.EXTRA_STATION)?.trim().orEmpty()
+                if (station.isNotBlank()) {
+                    applyPickedStation(station)
+                }
+            }
+        }
+    }
+
+    /** 将选中的加油站填入「加油站名称」与「去了哪里」 */
+    private fun applyPickedStation(station: String) {
+        binding.gasStationInput.setText(station)
+        binding.destinationInput.setText(station)
+        Repository.lastGasStation = station
+        requireContext().toast("已填入：$station，可修改", long = true)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -138,15 +155,9 @@ class RecordFragment : Fragment() {
         binding.refuelCheck.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
             binding.fuelDetailsLayout.show(checked)
             if (checked) {
-                // 勾选「本次加油了」：优先用最近加油站自动填充（用户已填则不覆盖）
-                val lastStation = Repository.lastGasStation
-                if (binding.gasStationInput.text?.isNotBlank() != true && lastStation.isNotBlank()) {
-                    binding.gasStationInput.setText(lastStation)
-                    requireContext().toast("已填入最近加油站：$lastStation，可修改")
-                }
-                if (binding.destinationInput.text?.isBlank() == true && binding.gasStationInput.text?.isNotBlank() == true) {
-                    binding.destinationInput.setText(binding.gasStationInput.text.toString())
-                }
+                // 勾选「本次加油了」：弹出附近加油站（5 公里）让用户选择，选中后自动填入
+                val intent = Intent(requireContext(), NearbyStationActivity::class.java)
+                nearbyStationLauncher.launch(intent)
             }
             updateEstimateCard()
         }
