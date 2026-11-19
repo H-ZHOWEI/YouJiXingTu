@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView style="@style/CardTitle" android:text="📊 星图统计" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card"
+            android:orientation="horizontal">
+
+            <Button android:id="@+id/periodWeekBtn" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:background="@drawable/bg_button_primary" android:text="本周" android:textColor="@color/white" android:textSize="12sp" />
+            <Button android:id="@+id/periodMonthBtn" android:layout_width="0dp" android:layout_height="36dp" android:layout_marginStart="5dp" android:layout_weight="1" android:background="@drawable/bg_button_ghost" android:text="本月" android:textColor="@color/muted" android:textSize="12sp" />
+            <Button android:id="@+id/periodYearBtn" android:layout_width="0dp" android:layout_height="36dp" android:layout_marginStart="5dp" android:layout_weight="1" android:background="@drawable/bg_button_ghost" android:text="本年" android:textColor="@color/muted" android:textSize="12sp" />
+            <Button android:id="@+id/periodAllBtn" android:layout_width="0dp" android:layout_height="36dp" android:layout_marginStart="5dp" android:layout_weight="1" android:background="@drawable/bg_button_ghost" android:text="全部" android:textColor="@color/muted" android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/qualityText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card"
+            android:gravity="center"
+            android:padding="10dp"
+            android:text="数据质量良好"
+            android:textColor="@color/good"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/gapWarningText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_card"
+            android:padding="10dp"
+            android:textColor="@color/average"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical">
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="6dp">
+                <TextView style="@style/LabelText" android:layout_width="0dp" android:layout_weight="1" android:text="行驶里程" />
+                <TextView android:id="@+id/periodDistanceText" style="@style/LabelText" android:text="-- km" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="6dp">
+                <TextView style="@style/LabelText" android:layout_width="0dp" android:layout_weight="1" android:text="总油费" />
+                <TextView android:id="@+id/periodCostText" style="@style/LabelText" android:text="-- 元" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="6dp">
+                <TextView style="@style/LabelText" android:layout_width="0dp" android:layout_weight="1" android:text="总油耗" />
+                <TextView android:id="@+id/periodFuelText" style="@style/LabelText" android:text="-- 升" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="6dp">
+                <TextView style="@style/LabelText" android:layout_width="0dp" android:layout_weight="1" android:text="平均油耗" />
+                <TextView android:id="@+id/periodConsumptionText" style="@style/LabelText" android:text="-- L/100km" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="6dp">
+                <TextView style="@style/LabelText" android:layout_width="0dp" android:layout_weight="1" android:text="每公里成本" />
+                <TextView android:id="@+id/periodCostPerKmText" style="@style/LabelText" android:text="-- 元/km" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="10dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView style="@style/CardTitle" android:text="⛽ 加油习惯分析" />
+            <TextView android:id="@+id/avgRefuelAmountText" style="@style/ValueText" android:layout_gravity="center_horizontal" android:layout_marginTop="8dp" android:text="-- 升" />
+            <TextView style="@style/LabelText" android:layout_gravity="center_horizontal" android:text="平均每次加油量" android:textSize="12sp" />
+            <TextView android:id="@+id/refuelFrequencyText" style="@style/ValueText" android:layout_gravity="center_horizontal" android:layout_marginTop="8dp" android:text="-- 天" />
+            <TextView style="@style/LabelText" android:layout_gravity="center_horizontal" android:text="平均加油间隔" android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

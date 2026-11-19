@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <TextView style="@style/CardTitle" android:text="🔍 提取小票信息" />
+        <TextView style="@style/LabelText" android:layout_marginTop="4dp" android:text="旧版使用模拟识别；这里可手动修改文本后再提取" android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/ocrPreview"
+            android:layout_width="match_parent"
+            android:layout_height="160dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_field"
+            android:scaleType="centerCrop" />
+
+        <TextView style="@style/LabelText" android:layout_marginTop="10dp" android:text="小票/收据文本" />
+        <EditText
+            android:id="@+id/receiptText"
+            android:layout_width="match_parent"
+            android:layout_height="130dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_field"
+            android:gravity="top"
+            android:inputType="textMultiLine"
+            android:textColor="@color/light"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/extractBtn"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_button_ghost"
+            android:text="从文本提取"
+            android:textColor="@color/primary"
+            android:textSize="13sp" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/bg_card" android:orientation="vertical">
+
+            <TextView style="@style/LabelText" android:text="加油站名称" />
+            <EditText android:id="@+id/ocrStationInput" android:layout_width="match_parent" android:layout_height="40dp" android:background="@drawable/bg_field" android:hint="未识别" android:inputType="text" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="14sp" />
+
+            <TextView style="@style/LabelText" android:layout_marginTop="6dp" android:text="加油量（升）" />
+            <EditText android:id="@+id/ocrLitersInput" android:layout_width="match_parent" android:layout_height="40dp" android:background="@drawable/bg_field" android:hint="未识别" android:inputType="numberDecimal" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="14sp" />
+
+            <TextView style="@style/LabelText" android:layout_marginTop="6dp" android:text="金额（元）" />
+            <EditText android:id="@+id/ocrCostInput" android:layout_width="match_parent" android:layout_height="40dp" android:background="@drawable/bg_field" android:hint="未识别" android:inputType="numberDecimal" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="14sp" />
+
+            <TextView style="@style/LabelText" android:layout_marginTop="6dp" android:text="油品类型（92/95/98/0）" />
+            <EditText android:id="@+id/ocrTypeInput" android:layout_width="match_parent" android:layout_height="40dp" android:background="@drawable/bg_field" android:hint="未识别" android:inputType="text" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:orientation="horizontal">
+            <Button android:id="@+id/cancelOcrBtn" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:background="@drawable/bg_button_ghost" android:text="取消" android:textColor="@color/muted" android:textSize="14sp" />
+            <Button android:id="@+id/applyOcrBtn" android:layout_width="0dp" android:layout_height="42dp" android:layout_marginStart="8dp" android:layout_weight="1" android:background="@drawable/bg_button_primary" android:text="应用到表单" android:textColor="@color/white" android:textSize="14sp" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

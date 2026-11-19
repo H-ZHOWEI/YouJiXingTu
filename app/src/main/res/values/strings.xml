@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">油迹星图</string>
+    <string name="tab_record">记录</string>
+    <string name="tab_stats">统计</string>
+    <string name="tab_stations">加油站</string>
+    <string name="tab_history">历史</string>
+</resources>

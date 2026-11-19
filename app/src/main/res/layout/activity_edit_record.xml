@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <TextView style="@style/CardTitle" android:text="✏️ 编辑星迹" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/bg_card" android:orientation="vertical">
+
+            <TextView style="@style/LabelText" android:text="日期时间 *" />
+            <Button android:id="@+id/editDateBtn" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="4dp" android:background="@drawable/bg_field" android:gravity="start|center_vertical" android:paddingStart="12dp" android:textColor="@color/light" android:textSize="14sp" />
+
+            <TextView style="@style/LabelText" android:layout_marginTop="8dp" android:text="当前油表公里数 *" />
+            <EditText android:id="@+id/editMileageInput" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="4dp" android:background="@drawable/bg_field" android:hint="请输入当前公里数" android:inputType="number" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="14sp" />
+            <CheckBox android:id="@+id/editForgotMileageCheck" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="我忘记了" android:textColor="@color/average" android:textSize="12sp" />
+            <TextView android:id="@+id/editMileageError" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/poor" android:textSize="12sp" android:visibility="gone" />
+
+            <CheckBox android:id="@+id/editRefuelCheck" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="⛽ 本次加油了" android:textColor="@color/light" android:textSize="15sp" />
+
+            <LinearLayout android:id="@+id/editFuelDetailsLayout" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/bg_field" android:orientation="vertical" android:padding="10dp" android:visibility="gone">
+
+                <TextView style="@style/LabelText" android:text="加油站名称 *" />
+                <EditText android:id="@+id/editGasStationInput" android:layout_width="match_parent" android:layout_height="40dp" android:background="@drawable/bg_field" android:hint="请输入加油站名称" android:inputType="text" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="14sp" />
+                <CheckBox android:id="@+id/editForgotGasStationCheck" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="我忘记了" android:textColor="@color/average" android:textSize="12sp" />
+                <TextView android:id="@+id/editGasStationError" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="请填写加油站名称" android:textColor="@color/poor" android:textSize="12sp" android:visibility="gone" />
+
+                <TextView style="@style/LabelText" android:layout_marginTop="6dp" android:text="加油量（升）*" />
+                <EditText android:id="@+id/editFuelLitersInput" android:layout_width="match_parent" android:layout_height="40dp" android:background="@drawable/bg_field" android:hint="请输入加油量" android:inputType="numberDecimal" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="14sp" />
+                <CheckBox android:id="@+id/editForgotFuelLitersCheck" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="我忘记了" android:textColor="@color/average" android:textSize="12sp" />
+                <TextView android:id="@+id/editFuelLitersError" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="请填写加油量" android:textColor="@color/poor" android:textSize="12sp" android:visibility="gone" />
+
+                <TextView style="@style/LabelText" android:layout_marginTop="6dp" android:text="加油金额（元）*" />
+                <EditText android:id="@+id/editFuelCostInput" android:layout_width="match_parent" android:layout_height="40dp" android:background="@drawable/bg_field" android:hint="请输入加油金额" android:inputType="numberDecimal" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="14sp" />
+                <CheckBox android:id="@+id/editForgotFuelCostCheck" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="我忘记了" android:textColor="@color/average" android:textSize="12sp" />
+                <TextView android:id="@+id/editFuelCostError" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="请填写加油金额" android:textColor="@color/poor" android:textSize="12sp" android:visibility="gone" />
+
+                <TextView style="@style/LabelText" android:layout_marginTop="6dp" android:text="油品类型 *" />
+                <Spinner android:id="@+id/editFuelTypeSpinner" android:layout_width="match_parent" android:layout_height="42dp" android:background="@drawable/bg_field" android:entries="@array/fuel_types" android:spinnerMode="dialog" />
+                <CheckBox android:id="@+id/editForgotFuelTypeCheck" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="我忘记了" android:textColor="@color/average" android:textSize="12sp" />
+                <TextView android:id="@+id/editFuelTypeError" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="请选择油品类型" android:textColor="@color/poor" android:textSize="12sp" android:visibility="gone" />
+
+                <TextView style="@style/LabelText" android:layout_marginTop="6dp" android:text="油箱状态" />
+                <RadioGroup android:id="@+id/editTankStatusGroup" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <RadioButton android:id="@+id/editTankFullRadio" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:checked="true" android:text="加满" android:textColor="@color/light" android:textSize="13sp" />
+                    <RadioButton android:id="@+id/editTankPartialRadio" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="部分加油" android:textColor="@color/light" android:textSize="13sp" />
+                </RadioGroup>
+            </LinearLayout>
+
+            <TextView style="@style/LabelText" android:layout_marginTop="8dp" android:text="去了哪里 *" />
+            <EditText android:id="@+id/editDestinationInput" android:layout_width="match_parent" android:layout_height="42dp" android:background="@drawable/bg_field" android:hint="请输入目的地" android:inputType="text" android:paddingStart="10dp" android:textColor="@color/light" android:textColorHint="@color/muted" android:textSize="14sp" />
+            <TextView android:id="@+id/editDestinationError" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="请填写目的地" android:textColor="@color/poor" android:textSize="12sp" android:visibility="gone" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:orientation="horizontal">
+            <Button android:id="@+id/cancelEditBtn" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:background="@drawable/bg_button_ghost" android:text="取消" android:textColor="@color/muted" android:textSize="14sp" />
+            <Button android:id="@+id/saveEditBtn" android:layout_width="0dp" android:layout_height="42dp" android:layout_marginStart="8dp" android:layout_weight="1" android:background="@drawable/bg_button_primary" android:text="保存修改" android:textColor="@color/white" android:textSize="14sp" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>
