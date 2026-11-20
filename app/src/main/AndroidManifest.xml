@@ -14,6 +14,9 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- v1.16 修复：Android 10+ 后台启动 Activity 必需。漏声明会导致系统设置里找不到本应用、
+         canDrawOverlays() 永远为 false，蓝牙自动启动不生效 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name=".YouJiApp"
