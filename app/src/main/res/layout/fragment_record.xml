@@ -452,6 +452,91 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- v1.15 车载蓝牙自动启动 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:layout_marginBottom="10dp">
+
+            <TextView style="@style/CardTitle" android:text="🚗 车载蓝牙自动启动" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="填你车机的蓝牙名称（要与手机蓝牙列表里显示的一致）。以后手机一连上这个蓝牙，就会自动打开本软件。"
+                android:textColor="@color/muted"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/btNameInput"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_field"
+                    android:hint="蓝牙名称（如：蓝牙A）"
+                    android:inputType="text"
+                    android:paddingStart="10dp"
+                    android:textColor="@color/light"
+                    android:textColorHint="@color/muted"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/btSaveBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_button_ghost"
+                    android:text="保存"
+                    android:textColor="@color/primary"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <CheckBox
+                    android:id="@+id/btEnabledCheck"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="启用：连接该蓝牙后自动打开"
+                    android:textColor="@color/light"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/btOverlayBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:background="@drawable/bg_button_ghost"
+                    android:text="授权悬浮窗"
+                    android:textColor="@color/primary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/btStatusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="@color/average"
+                android:textSize="12sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

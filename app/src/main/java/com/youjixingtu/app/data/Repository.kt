@@ -28,6 +28,8 @@ object Repository {
     const val KEY_LOC_TIME = "lastLocTime"
     const val KEY_LOW_FUEL_NOTICE_DAY = "lowFuelNoticeDay"
     const val KEY_GAUGE_TOTAL = "gaugeTotal"
+    const val KEY_BT_AUTO_ENABLED = "btAutoStartEnabled"
+    const val KEY_BT_DEVICE_NAME = "btAutoStartDeviceName"
     const val KEY_GAUGE_CURRENT = "gaugeCurrent"
     const val KEY_GAUGE_CURRENT_DATE = "gaugeCurrentDate"
 
@@ -203,6 +205,16 @@ object Repository {
     var gaugeCurrentDate: String
         get() = prefs.getString(KEY_GAUGE_CURRENT_DATE, "") ?: ""
         set(value) { prefs.edit().putString(KEY_GAUGE_CURRENT_DATE, value).apply() }
+
+    /** v1.15：车载蓝牙自动启动开关 */
+    var btAutoStartEnabled: Boolean
+        get() = prefs.getBoolean(KEY_BT_AUTO_ENABLED, false)
+        set(value) { prefs.edit().putBoolean(KEY_BT_AUTO_ENABLED, value).apply() }
+
+    /** v1.15：要匹配的车载蓝牙名称（如「蓝牙A」），空表示未配置 */
+    var btDeviceName: String
+        get() = prefs.getString(KEY_BT_DEVICE_NAME, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_BT_DEVICE_NAME, value.trim()).apply() }
 
     fun loadPhotos(): MutableList<CameraPhoto> {
         val stored = prefs.getString(KEY_CAMERA_PHOTOS, null)

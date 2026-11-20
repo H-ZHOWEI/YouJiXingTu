@@ -36,11 +36,16 @@ object InsetsUtil {
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            // v1.15：同时处理输入法(IME) insets——edge-to-edge 下窗口不会自动给键盘让位，
+            // 键盘弹出时会盖住输入框。底部取 systemBars 与 IME 的较大值，
+            // 键盘弹出时把整个内容顶上去，输入框始终可见。
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottom = maxOf(bars.bottom, ime.bottom)
             v.updatePadding(
                 left = bars.left,
                 top = originalTop + bars.top,
                 right = bars.right,
-                bottom = originalBottom + bars.bottom
+                bottom = originalBottom + bottom
             )
             // 返回消费后的 insets，避免子视图重复叠加
             WindowInsetsCompat.CONSUMED

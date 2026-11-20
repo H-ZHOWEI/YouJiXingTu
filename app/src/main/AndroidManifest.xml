@@ -10,6 +10,10 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- v1.15 车载蓝牙自动启动：连接指定蓝牙后自动打开本软件 -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <application
         android:name=".YouJiApp"
@@ -76,5 +80,14 @@
             android:exported="false"
             android:label="选择加油站"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- v1.15 车载蓝牙自动启动：系统受保护广播，连接蓝牙时触发 -->
+        <receiver
+            android:name=".util.BluetoothAutoStartReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

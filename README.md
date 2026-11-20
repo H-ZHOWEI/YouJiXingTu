@@ -20,6 +20,8 @@
 | 星空主题、应用图标 | `StarFieldView` + 原版图标 |
 | 版本更新 | 启动/手动检查 GitHub Release，多镜像下载安装（横幅只显示当前版本说明，v1.13） |
 | 智能化提示（v1.12，15 项） | 加满/油品自动推断、常用地点补全、重复与异常录入确认、低油量主动提醒、下次加油预测、异常油耗与数据质量建议（OCR 相关项随拍照功能在 v1.14 移除） |
+| 车载蓝牙自动打开（v1.15） | 连接指定蓝牙（如车机）后自动启动本软件；`BluetoothAutoStartReceiver` 监听 ACL_CONNECTED，需蓝牙名匹配 + 蓝牙/悬浮窗权限 |
+| 输入法不遮挡输入框（v1.15） | `InsetsUtil` 底部 padding 取 systemBars 与 IME insets 较大值，键盘弹出时表单自动上移 |
 
 ## 目录结构
 
@@ -31,6 +33,7 @@ app/src/main/java/com/youjixingtu/app/
   core/Analytics.kt        全部统计与校验算法（v1.11 剩余油量按加满正序推算；v1.14 新增油表格数法 gaugeEstimate，越用越准）
   ui/                      MainActivity 与四个页签、编辑页、OCR 页、附近加油站选择页
   util/UpdateManager.kt    版本更新
+  util/BluetoothAutoStartReceiver.kt 车载蓝牙连接后自动启动（v1.15）
   util/TextExtractHelper.kt 小票文本提取
   util/CryptoUtil.kt       Keystore AES-GCM 透明加密（v1.7）
   (高德 SDK 接入在 ui/NearbyStationActivity.kt，Key 可在 App 内设置或写 Manifest 占位符)

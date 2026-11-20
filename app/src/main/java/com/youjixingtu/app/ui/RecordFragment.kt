@@ -1,10 +1,14 @@
 package com.youjixingtu.app.ui
 
+import android.Manifest
 import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -15,6 +19,7 @@ import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.youjixingtu.app.R
 import com.youjixingtu.app.core.Analytics
@@ -47,6 +52,10 @@ class RecordFragment : Fragment() {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
 
     private lateinit var nearbyStationLauncher: ActivityResultLauncher<Intent>
+    /** v1.15：BLUETOOTH_CONNECT 运行时权限（读连接中的蓝牙设备名需要） */
+    private lateinit var btPermissionLauncher: ActivityResultLauncher<String>
+    /** v1.15：保存蓝牙名时先记下来，授权成功后再落盘并启用 */
+    private var pendingBtName: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +65,25 @@ class RecordFragment : Fragment() {
                 if (station.isNotBlank()) {
                     applyPickedStation(station)
                 }
+            }
+        }
+        btPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val name = pendingBtName
+            if (granted && name != null) {
+                Repository.btDeviceName = name
+                Repository.btAutoStartEnabled = true
+                pendingBtName = null
+                requireContext().toast("已保存：连接「$name」后自动打开本软件")
+                refreshBluetoothCard()
+            } else if (!granted && Build.VERSION.SDK_INT >= 31 && name != null) {
+                requireContext().toast("未授予蓝牙权限，无法识别连接的蓝牙名称；可再次点「保存」重试")
+            } else if (name != null) {
+                // 旧系统无需该权限，直接保存
+                Repository.btDeviceName = name
+                Repository.btAutoStartEnabled = true
+                pendingBtName = null
+                requireContext().toast("已保存：连接「$name」后自动打开本软件")
+                refreshBluetoothCard()
             }
         }
     }
@@ -116,6 +144,7 @@ class RecordFragment : Fragment() {
         binding.fuelTypeSpinner.setSelection(fuelTypePosition(requireContext(), Repository.lastFuelType))
 
         setupDestinationSuggestions()
+        refreshBluetoothCard()
         updateEstimateCard()
         updateMiniStats()
         updateSmartHint()
@@ -303,6 +332,79 @@ class RecordFragment : Fragment() {
             requireContext().toast("油表总格数已设置为 $total 格")
             updateEstimateCard()
         }
+
+        // ===== v1.15 车载蓝牙自动启动 =====
+        binding.btSaveBtn.setOnClickListener {
+            val name = binding.btNameInput.text.toString().trim()
+            if (name.isEmpty()) {
+                requireContext().toast("请先填写车机蓝牙的名称")
+                return@setOnClickListener
+            }
+            // Android 12+ 读取蓝牙设备名需要 BLUETOOTH_CONNECT 运行时权限
+            if (Build.VERSION.SDK_INT >= 31 &&
+                ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_CONNECT)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                pendingBtName = name
+                btPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                return@setOnClickListener
+            }
+            Repository.btDeviceName = name
+            Repository.btAutoStartEnabled = true
+            requireContext().toast("已保存：连接「$name」后自动打开本软件")
+            refreshBluetoothCard()
+        }
+        binding.btEnabledCheck.setOnCheckedChangeListener { _, checked ->
+            if (Repository.btDeviceName.isBlank()) {
+                if (checked) {
+                    requireContext().toast("请先填写蓝牙名称并保存")
+                }
+                binding.btEnabledCheck.isChecked = false
+                return@setOnCheckedChangeListener
+            }
+            Repository.btAutoStartEnabled = checked
+        }
+        binding.btOverlayBtn.setOnClickListener {
+            if (Build.VERSION.SDK_INT >= 29 && !Settings.canDrawOverlays(requireContext())) {
+                runCatching {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            android.net.Uri.parse("package:${requireContext().packageName}")
+                        )
+                    )
+                }.onFailure { requireContext().toast("请到系统设置里允许本软件「显示在其他应用上层」") }
+            } else {
+                requireContext().toast("悬浮窗权限已授予，无需再设置")
+            }
+        }
+    }
+
+    /** v1.15：把蓝牙卡片回显到当前设置状态，并给出待办提示 */
+    private fun refreshBluetoothCard() {
+        val name = Repository.btDeviceName
+        if (binding.btNameInput.text.isNullOrBlank() && name.isNotBlank()) {
+            binding.btNameInput.setText(name)
+        }
+        binding.btEnabledCheck.isChecked = Repository.btAutoStartEnabled && name.isNotBlank()
+        val tips = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= 29 && !Settings.canDrawOverlays(requireContext())) {
+            tips.add("① 点「授权悬浮窗」允许显示在其他应用上层（后台自动打开必需）")
+        }
+        if (Build.VERSION.SDK_INT >= 31 &&
+            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_CONNECT)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            tips.add("② 点「保存」后按提示允许「附近的设备」权限（识别蓝牙名必需）")
+        }
+        if (Repository.btAutoStartEnabled && name.isNotBlank() && tips.isEmpty()) {
+            binding.btStatusText.text = "已启用：连接「$name」后自动打开。若没生效，请到系统设置里允许本软件「自启动」"
+        } else if (tips.isNotEmpty()) {
+            binding.btStatusText.text = "待完成：\n" + tips.joinToString("\n")
+        } else {
+            binding.btStatusText.text = ""
+        }
+        binding.btStatusText.visibility = if (tips.isEmpty() && name.isBlank()) View.GONE else View.VISIBLE
     }
 
     private fun setupForgot(check: CompoundButton, input: View, error: TextView) {
