@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.youjixingtu.app.data.Repository
 import com.youjixingtu.app.ui.MainActivity
@@ -27,7 +28,16 @@ import com.youjixingtu.app.ui.MainActivity
 class BluetoothAutoStartReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        // 进程可能被系统直接拉起（Application 未走 init），确保仓库已初始化
+        runCatching { Repository.btUseOwnSolution }
+            .onFailure { Repository.init(context.applicationContext) }
+        // v1.19 总开关：关闭后本软件完全不插手，交给手机系统自带功能
+        if (!Repository.btUseOwnSolution) {
+            Log.i("BT_AUTO_START", "总开关已关闭，忽略蓝牙广播（交给系统自带功能）")
+            return
+        }
         val action = intent.action ?: return
+        Log.i("BT_AUTO_START", "收到广播: $action")
         // A2DP/HFP 广播每次连接状态变化都会来，只在「已连接」时处理，避免断开/连接中误触发
         if (action == BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED ||
             action == BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED
@@ -85,6 +95,7 @@ class BluetoothAutoStartReceiver : BroadcastReceiver() {
     }
 
     private fun record(msg: String) {
+        Log.i("BT_AUTO_START", msg)
         runCatching { Repository.btLastEvent = msg }
     }
 
@@ -113,7 +124,12 @@ class BluetoothAutoStartReceiver : BroadcastReceiver() {
          */
         fun diagnose(context: Context): String {
             val problems = mutableListOf<String>()
+            if (!Repository.btUseOwnSolution) {
+                return "总开关已关闭：本软件不插手蓝牙自动打开，当前交给手机系统自带功能。" +
+                    "若要改用本软件的方案，请打开卡片最上方的总开关。"
+            }
             if (!Repository.btAutoStartEnabled) problems.add("①「启用」开关未勾选")
+            if (!Repository.btKeepAlive) problems.add("⑤「后台保活」未开启（关键！系统冻结后收不到蓝牙广播）")
             val name = Repository.btDeviceName.trim()
             val addr = Repository.btDeviceAddress.trim()
             if (name.isEmpty() && addr.isEmpty()) problems.add("②未选择车机蓝牙（点「选择设备」）")

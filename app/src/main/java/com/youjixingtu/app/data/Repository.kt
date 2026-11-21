@@ -34,6 +34,10 @@ object Repository {
     const val KEY_BT_DEVICE_ADDRESS = "btAutoStartDeviceAddr"
     /** v1.17：最近一次蓝牙自动启动的诊断文本 */
     const val KEY_BT_LAST_EVENT = "btLastEvent"
+    /** v1.18：保活服务开关（前台服务，防止进程被冻结导致收不到蓝牙广播） */
+    const val KEY_BT_KEEP_ALIVE = "btKeepAlive"
+    /** v1.19：整套方案总开关。关闭后本软件完全不插手蓝牙自动打开，交给手机系统自带功能 */
+    const val KEY_BT_USE_OWN = "btUseOwnSolution"
     const val KEY_GAUGE_CURRENT = "gaugeCurrent"
     const val KEY_GAUGE_CURRENT_DATE = "gaugeCurrentDate"
 
@@ -224,6 +228,20 @@ object Repository {
     var btDeviceAddress: String
         get() = prefs.getString(KEY_BT_DEVICE_ADDRESS, "") ?: ""
         set(value) { prefs.edit().putString(KEY_BT_DEVICE_ADDRESS, value.trim()).apply() }
+
+    /** v1.18：蓝牙监听保活服务开关 */
+    var btKeepAlive: Boolean
+        get() = prefs.getBoolean(KEY_BT_KEEP_ALIVE, false)
+        set(value) { prefs.edit().putBoolean(KEY_BT_KEEP_ALIVE, value).apply() }
+
+    /**
+     * v1.19：整套方案总开关——是否由本软件接管「连接蓝牙自动打开」。
+     * 默认 true（老用户升级后保持原有行为）。关闭后：不启动保活服务、接收器不处理广播、
+     * 开机不自启，本软件完全不耗电，交给手机系统自带的蓝牙功能。
+     */
+    var btUseOwnSolution: Boolean
+        get() = prefs.getBoolean(KEY_BT_USE_OWN, true)
+        set(value) { prefs.edit().putBoolean(KEY_BT_USE_OWN, value).apply() }
 
     /** v1.17：最近一次蓝牙连接判定过程的诊断文本（写入时自动带时间戳） */
     var btLastEvent: String

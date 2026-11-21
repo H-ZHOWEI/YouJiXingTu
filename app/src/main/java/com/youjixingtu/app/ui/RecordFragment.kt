@@ -32,6 +32,7 @@ import com.youjixingtu.app.model.ForgottenFuelFields
 import com.youjixingtu.app.model.FuelRecord
 import com.youjixingtu.app.model.RefuelData
 import com.youjixingtu.app.util.BluetoothAutoStartReceiver
+import com.youjixingtu.app.util.BluetoothWatchService
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -61,6 +62,12 @@ class RecordFragment : Fragment() {
     private var pendingBtName: String? = null
     /** v1.17：蓝牙权限授权后要弹出的动作（选择设备对话框） */
     private var pendingBtAction: String? = null
+    /** v1.18：通知权限（前台服务保活需要） */
+    private lateinit var notifPermissionLauncher: ActivityResultLauncher<String>
+    /** v1.18：申请通知权限后是否要启动保活服务 */
+    private var pendingStartWatch = false
+    /** v1.19：程序化回显总开关时抑制其监听，避免误触发停/启服务 */
+    private var suppressBtMaster = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,6 +77,16 @@ class RecordFragment : Fragment() {
                 if (station.isNotBlank()) {
                     applyPickedStation(station)
                 }
+            }
+        }
+        notifPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+            // 通知权限给不给都尝试启动服务：Android 12 以下无需该权限；
+            // 未授予时前台服务仍运行，只是通知可能不显示（不影响保活与广播接收）
+            if (pendingStartWatch) {
+                pendingStartWatch = false
+                BluetoothWatchService.start(requireContext())
+                Repository.btKeepAlive = true
+                refreshBluetoothCard()
             }
         }
         btPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -360,6 +377,44 @@ class RecordFragment : Fragment() {
         binding.btTestBtn.setOnClickListener {
             requireContext().toast(BluetoothAutoStartReceiver.diagnose(requireContext()), long = true)
         }
+        // v1.19：整套方案总开关——关掉后本软件完全不插手、不耗电，交给手机系统自带功能
+        binding.btMasterCheck.setOnCheckedChangeListener { _, checked ->
+            if (suppressBtMaster) return@setOnCheckedChangeListener
+            Repository.btUseOwnSolution = checked
+            if (!checked) {
+                BluetoothWatchService.stop(requireContext())
+                requireContext().toast("已交给手机系统自带功能：本软件不再自动打开，也不再后台耗电")
+            } else {
+                if (Repository.btAutoStartEnabled && Repository.btKeepAlive) {
+                    BluetoothWatchService.start(requireContext())
+                    requireContext().toast("已启用本软件的自动打开方案")
+                } else {
+                    requireContext().toast("已启用；请再勾选下方「启用」和「后台保活」并选好设备")
+                }
+            }
+            refreshBluetoothCard()
+        }
+        binding.btKeepAliveCheck.setOnCheckedChangeListener { _, checked ->
+            if (checked) {
+                // Android 13+ 前台服务通知需要 POST_NOTIFICATIONS
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED
+                ) {
+                    pendingStartWatch = true
+                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    BluetoothWatchService.start(requireContext())
+                    Repository.btKeepAlive = true
+                    requireContext().toast("后台保活已开启，通知栏会常驻一条通知（请勿手动划掉）")
+                }
+            } else {
+                BluetoothWatchService.stop(requireContext())
+                Repository.btKeepAlive = false
+                requireContext().toast("后台保活已关闭，系统可能冻结本软件导致蓝牙自动打开失效")
+            }
+            refreshBluetoothCard()
+        }
         binding.btEnabledCheck.setOnCheckedChangeListener { _, checked ->
             if (Repository.btDeviceName.isBlank()) {
                 if (checked) {
@@ -447,28 +502,56 @@ class RecordFragment : Fragment() {
         if (binding.btNameInput.text.isNullOrBlank() && name.isNotBlank()) {
             binding.btNameInput.setText(name)
         }
+        val useOwn = Repository.btUseOwnSolution
+        suppressBtMaster = true
+        binding.btMasterCheck.isChecked = useOwn
+        suppressBtMaster = false
         binding.btEnabledCheck.isChecked = Repository.btAutoStartEnabled && name.isNotBlank()
+        binding.btKeepAliveCheck.isChecked = Repository.btKeepAlive
+        // 总开关关闭时把下面的子项置灰，表示本方案整体不生效
+        val subEnabled = useOwn
+        binding.btNameInput.isEnabled = subEnabled
+        binding.btSaveBtn.isEnabled = subEnabled
+        binding.btPickDeviceBtn.isEnabled = subEnabled
+        binding.btTestBtn.isEnabled = subEnabled
+        binding.btEnabledCheck.isEnabled = subEnabled
+        binding.btKeepAliveCheck.isEnabled = subEnabled
+        binding.btOverlayBtn.isEnabled = subEnabled
+
         val tips = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= 29 && !Settings.canDrawOverlays(requireContext())) {
-            tips.add("① 点「授权悬浮窗」允许显示在其他应用上层（后台自动打开必需）")
-        }
-        if (Build.VERSION.SDK_INT >= 31 &&
-            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_CONNECT)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            tips.add("② 点「保存」后按提示允许「附近的设备」权限（识别蓝牙名必需）")
-        }
-        val addr = Repository.btDeviceAddress
-        if (Repository.btAutoStartEnabled && name.isNotBlank() && tips.isEmpty()) {
-            binding.btStatusText.text = "已启用：连接「$name」后自动打开" +
-                (if (addr.isNotBlank()) "（已按 MAC 识别）" else "") +
-                "。若没生效，请到系统设置里允许本软件「自启动」"
-        } else if (tips.isNotEmpty()) {
-            binding.btStatusText.text = "待完成：\n" + tips.joinToString("\n")
+        if (!useOwn) {
+            // v1.19：总开关关闭——交给系统自带功能，本软件不耗电
+            binding.btStatusText.text = "已关闭：连接蓝牙后本软件不会自动打开，也不再后台耗电，" +
+                "交给你手机系统自带的蓝牙功能处理。需要本软件接管时，勾选上方总开关。"
         } else {
-            binding.btStatusText.text = ""
+            // v1.18：保活是关键——国产 ROM 会冻结后台进程导致广播被丢弃，必须开
+            if (!Repository.btKeepAlive) {
+                tips.add("① 勾选「后台保活」（不开则系统冻结后收不到蓝牙广播，自动打开必失效）")
+            }
+            if (Build.VERSION.SDK_INT >= 29 && !Settings.canDrawOverlays(requireContext())) {
+                tips.add("② 点「授权悬浮窗」允许显示在其他应用上层（后台自动打开必需）")
+            }
+            if (Build.VERSION.SDK_INT >= 31 &&
+                ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_CONNECT)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                tips.add("③ 点「保存」后按提示允许「附近的设备」权限（识别蓝牙名必需）")
+            }
+            val addr = Repository.btDeviceAddress
+            if (Repository.btAutoStartEnabled && name.isNotBlank() && Repository.btKeepAlive && tips.isEmpty()) {
+                binding.btStatusText.text = "已启用：连接「$name」后自动打开" +
+                    (if (addr.isNotBlank()) "（已按 MAC 识别）" else "") +
+                    "，后台保活运行中。若没生效，请到系统设置里允许本软件「自启动」"
+            } else if (tips.isNotEmpty()) {
+                binding.btStatusText.text = "待完成：\n" + tips.joinToString("\n")
+            } else {
+                binding.btStatusText.text = ""
+            }
         }
-        binding.btStatusText.visibility = if (tips.isEmpty() && name.isBlank()) View.GONE else View.VISIBLE
+        binding.btStatusText.visibility =
+            if (!useOwn) View.VISIBLE
+            else if (tips.isEmpty() && name.isBlank()) View.GONE
+            else View.VISIBLE
 
         // v1.17：显示最近一次蓝牙广播的判定结果，出问题能直接看出卡在哪一步
         val lastEvent = Repository.btLastEvent

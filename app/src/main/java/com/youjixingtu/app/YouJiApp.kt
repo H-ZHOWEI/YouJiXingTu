@@ -7,12 +7,19 @@ import android.os.Bundle
 import com.amap.api.location.AMapLocationClient
 import com.amap.api.services.core.ServiceSettings
 import com.youjixingtu.app.data.Repository
+import com.youjixingtu.app.util.BluetoothWatchService
 import com.youjixingtu.app.util.InsetsUtil
 
 class YouJiApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Repository.init(this)
+
+        // v1.18：若用户已开启蓝牙自动启动 + 后台保活，进程一起来就拉起前台服务，
+        // 避免被系统冻结导致收不到蓝牙广播（含手机重启后被广播拉起的场景）。
+        if (Repository.btUseOwnSolution && Repository.btKeepAlive && Repository.btAutoStartEnabled) {
+            BluetoothWatchService.start(this)
+        }
 
         // 高德 6.x/9.x 强制要求：任何业务接口（含构造客户端）之前必须完成隐私合规声明。
         // 漏掉这一步时，new AMapLocationClient() 会直接抛异常，表现为「定位不可用 /

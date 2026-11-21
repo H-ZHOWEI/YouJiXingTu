@@ -462,6 +462,16 @@
 
             <TextView style="@style/CardTitle" android:text="🚗 车载蓝牙自动启动" />
 
+            <!-- v1.19 整套方案总开关 -->
+            <CheckBox
+                android:id="@+id/btMasterCheck"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="由本软件自动打开（关闭则交给手机系统自带功能，本软件不耗电）"
+                android:textColor="@color/light"
+                android:textSize="13sp" />
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -554,6 +564,15 @@
                     android:textColor="@color/primary"
                     android:textSize="12sp" />
             </LinearLayout>
+
+            <CheckBox
+                android:id="@+id/btKeepAliveCheck"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="后台保活（必须开：防止系统冻结后收不到蓝牙广播，通知栏会常驻一条通知）"
+                android:textColor="@color/light"
+                android:textSize="12sp" />
 
             <TextView
                 android:id="@+id/btStatusText"
