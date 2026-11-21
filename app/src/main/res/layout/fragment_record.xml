@@ -466,7 +466,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="填你车机的蓝牙名称（要与手机蓝牙列表里显示的一致）。以后手机一连上这个蓝牙，就会自动打开本软件。"
+                android:text="推荐点「选择设备」直接挑车机（自动记 MAC，最可靠）。以后手机一连上这个蓝牙，就会自动打开本软件。连上没反应的话点「测试配置」看差哪一步。"
                 android:textColor="@color/muted"
                 android:textSize="12sp" />
 
@@ -527,6 +527,34 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btPickDeviceBtn"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_button_ghost"
+                    android:text="选择设备"
+                    android:textColor="@color/primary"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btTestBtn"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_button_ghost"
+                    android:text="测试配置"
+                    android:textColor="@color/primary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/btStatusText"
                 android:layout_width="match_parent"
@@ -534,6 +562,15 @@
                 android:layout_marginTop="6dp"
                 android:textColor="@color/average"
                 android:textSize="12sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/btDiagText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="@color/muted"
+                android:textSize="11sp"
                 android:visibility="gone" />
         </LinearLayout>
 

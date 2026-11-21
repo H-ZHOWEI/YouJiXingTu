@@ -1,6 +1,10 @@
 package com.youjixingtu.app.util
 
+import android.Manifest
+import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothHeadset
+import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -12,57 +16,120 @@ import com.youjixingtu.app.data.Repository
 import com.youjixingtu.app.ui.MainActivity
 
 /**
- * v1.15：车载蓝牙自动启动。
+ * v1.17：车载蓝牙自动启动（可诊断版）。
  *
- * 监听系统「蓝牙设备已连接」广播（ACTION_ACL_CONNECTED），当连接的设备名
- * 与用户在记录页配置的蓝牙名称匹配时，自动打开本软件。
+ * 监听三类广播：ACL 连接、A2DP 媒体音频连接、HFP 免提连接——车机大多是后两者才真正「连上」，
+ * 只听 ACL 时容易错过。判定过程全部写入 [Repository.btLastEvent]，在卡片上可见，便于自查。
  *
- * 注意事项：
- * · Android 12+ 读取蓝牙设备名需要 BLUETOOTH_CONNECT 运行时权限（配置入口会引导授权）；
- * · Android 10+ 后台启动 Activity 需要「显示在其他应用上层」（悬浮窗）权限，
- *   配置入口提供一键跳转系统设置的按钮；
- * · 若被系统「强制停止」或 ROM 的自启动管理拦截，广播可能收不到——提示用户
- *   在系统设置里允许本软件自启动/后台运行。
+ * 匹配优先级：MAC 地址 > 蓝牙名。Android 12+ 广播里读设备名需要 BLUETOOTH_CONNECT，
+ * 且很多车机在 ACL 广播时名字尚未就绪；MAC 地址稳定可靠，故「从已配对设备选择」会同时存 MAC。
  */
 class BluetoothAutoStartReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != BluetoothDevice.ACTION_ACL_CONNECTED) return
-        if (!Repository.btAutoStartEnabled) return
-        val configured = Repository.btDeviceName.trim()
-        if (configured.isEmpty()) return
+        val action = intent.action ?: return
+        // A2DP/HFP 广播每次连接状态变化都会来，只在「已连接」时处理，避免断开/连接中误触发
+        if (action == BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED ||
+            action == BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED
+        ) {
+            val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1)
+            if (state != BluetoothProfile.STATE_CONNECTED) return
+        }
+        val device = getDeviceExtra(intent) ?: run {
+            record("收到「${actionShort(action)}」广播，但系统未附带设备信息")
+            return
+        }
 
-        val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= 33) {
+        if (!Repository.btAutoStartEnabled) {
+            record("收到「${actionShort(action)}」广播，但自动打开开关未开启")
+            return
+        }
+        val configuredName = Repository.btDeviceName.trim()
+        val configuredAddr = Repository.btDeviceAddress.trim()
+        if (configuredName.isEmpty() && configuredAddr.isEmpty()) {
+            record("收到蓝牙连接，但未配置车机设备")
+            return
+        }
+
+        val hasBtPerm = Build.VERSION.SDK_INT < 31 ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+                PackageManager.PERMISSION_GRANTED
+        val name = if (hasBtPerm) runCatching { device.name }.getOrNull().orEmpty().trim() else ""
+        val addr = if (hasBtPerm) runCatching { device.address }.getOrNull().orEmpty().trim() else ""
+
+        // MAC 优先，名字兜底（双向包含、忽略大小写）
+        val addrMatch = configuredAddr.isNotEmpty() && addr.equals(configuredAddr, ignoreCase = true)
+        val nameMatch = name.isNotEmpty() && configuredName.isNotEmpty() &&
+            (name.contains(configuredName, ignoreCase = true) ||
+                configuredName.contains(name, ignoreCase = true))
+        if (!addrMatch && !nameMatch) {
+            val dev = name.ifBlank { "未命名设备" }
+            val cfg = configuredName.ifBlank { "" } + if (configuredAddr.isNotEmpty()) " / ${maskAddr(configuredAddr)}" else ""
+            record("连接了「$dev」${if (addr.isNotEmpty()) " [${maskAddr(addr)}]" else ""}，与配置「$cfg」不匹配")
+            return
+        }
+
+        val overlayGranted = Build.VERSION.SDK_INT < 29 || Settings.canDrawOverlays(context)
+        val launch = Intent(context, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val started = runCatching { context.startActivity(launch) }.isSuccess
+        record(
+            "连接「${name.ifBlank { maskAddr(addr) }}」匹配成功（${if (addrMatch) "MAC" else "名称"}）→ " +
+                if (started) {
+                    "已发起自动打开" + if (!overlayGranted) "；悬浮窗未授权，可能被系统拦截" else ""
+                } else {
+                    "启动被系统拒绝；请检查悬浮窗权限与 ROM 自启动设置"
+                }
+        )
+    }
+
+    private fun record(msg: String) {
+        runCatching { Repository.btLastEvent = msg }
+    }
+
+    private fun getDeviceExtra(intent: Intent): BluetoothDevice? =
+        if (Build.VERSION.SDK_INT >= 33) {
             intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
         } else {
             @Suppress("DEPRECATION")
             intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
         }
-        device ?: return
 
-        // Android 12+ 必须持有 BLUETOOTH_CONNECT 才能读设备名，未授权则跳过
-        val name: String? = if (Build.VERSION.SDK_INT >= 31 &&
-            ContextCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_CONNECT)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            null
-        } else {
-            runCatching { device.name }.getOrNull()
+    private fun actionShort(action: String) = when (action) {
+        BluetoothDevice.ACTION_ACL_CONNECTED -> "蓝牙连接"
+        BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED -> "媒体音频连接"
+        BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED -> "免提连接"
+        else -> "蓝牙广播"
+    }
+
+    private fun maskAddr(addr: String): String =
+        if (addr.length >= 8) addr.takeLast(8) else addr
+
+    companion object {
+        /**
+         * v1.17：检查自动打开的前置条件是否齐备，返回人类可读结论。
+         * 供卡片「测试配置」按钮调用——不用真去车里连蓝牙也能知道卡在哪一步。
+         */
+        fun diagnose(context: Context): String {
+            val problems = mutableListOf<String>()
+            if (!Repository.btAutoStartEnabled) problems.add("①「启用」开关未勾选")
+            val name = Repository.btDeviceName.trim()
+            val addr = Repository.btDeviceAddress.trim()
+            if (name.isEmpty() && addr.isEmpty()) problems.add("②未选择车机蓝牙（点「选择设备」）")
+            if (Build.VERSION.SDK_INT >= 31 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) !=
+                    PackageManager.PERMISSION_GRANTED
+            ) problems.add("③蓝牙权限未授予（允许「附近的设备」）")
+            if (Build.VERSION.SDK_INT >= 29 && !Settings.canDrawOverlays(context)) {
+                problems.add("④悬浮窗权限未授予（点「授权悬浮窗」）")
+            }
+            return if (problems.isEmpty()) {
+                "配置齐全：开关 / 设备 / 蓝牙权限 / 悬浮窗都已就绪。上车连上该蓝牙即可自动打开；" +
+                    "若仍不生效，请到 设置 → 应用管理 → 油迹星图 允许「自启动 / 后台运行」。"
+            } else {
+                "还差这些步骤：\n" + problems.joinToString("\n") + "\n补齐后再连接蓝牙测试。"
+            }
         }
-        val deviceName = name?.trim().orEmpty()
-        if (deviceName.isEmpty()) return
-
-        // 双向包含匹配，宽容大小写：配置「蓝牙A」能匹配系统名「蓝牙A」或「XX蓝牙A」
-        val matched = deviceName.contains(configured, ignoreCase = true) ||
-            configured.contains(deviceName, ignoreCase = true)
-        if (!matched) return
-
-        // Android 10+ 后台启动 Activity 需要悬浮窗权限，未授权则跳过
-        if (Build.VERSION.SDK_INT >= 29 && !Settings.canDrawOverlays(context)) return
-
-        val launch = Intent(context, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        }
-        runCatching { context.startActivity(launch) }
     }
 }

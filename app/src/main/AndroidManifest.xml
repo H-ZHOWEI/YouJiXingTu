@@ -85,11 +85,14 @@
             android:windowSoftInputMode="adjustResize" />
 
         <!-- v1.15 车载蓝牙自动启动：系统受保护广播，连接蓝牙时触发 -->
+        <!-- v1.17：同时监听 ACL 连接与 A2DP/HFP 音频连接，车机通常后两者才真正连上 -->
         <receiver
             android:name=".util.BluetoothAutoStartReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <action android:name="android.bluetooth.a2dp.profile.action.CONNECTION_STATE_CHANGED" />
+                <action android:name="android.bluetooth.headset.profile.action.CONNECTION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
     </application>

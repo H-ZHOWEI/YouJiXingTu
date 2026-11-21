@@ -30,6 +30,10 @@ object Repository {
     const val KEY_GAUGE_TOTAL = "gaugeTotal"
     const val KEY_BT_AUTO_ENABLED = "btAutoStartEnabled"
     const val KEY_BT_DEVICE_NAME = "btAutoStartDeviceName"
+    /** v1.17：配置设备的 MAC 地址，名称读不到时用 MAC 可靠匹配 */
+    const val KEY_BT_DEVICE_ADDRESS = "btAutoStartDeviceAddr"
+    /** v1.17：最近一次蓝牙自动启动的诊断文本 */
+    const val KEY_BT_LAST_EVENT = "btLastEvent"
     const val KEY_GAUGE_CURRENT = "gaugeCurrent"
     const val KEY_GAUGE_CURRENT_DATE = "gaugeCurrentDate"
 
@@ -215,6 +219,20 @@ object Repository {
     var btDeviceName: String
         get() = prefs.getString(KEY_BT_DEVICE_NAME, "") ?: ""
         set(value) { prefs.edit().putString(KEY_BT_DEVICE_NAME, value.trim()).apply() }
+
+    /** v1.17：配置设备的 MAC 地址，名称读不到时按 MAC 匹配 */
+    var btDeviceAddress: String
+        get() = prefs.getString(KEY_BT_DEVICE_ADDRESS, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_BT_DEVICE_ADDRESS, value.trim()).apply() }
+
+    /** v1.17：最近一次蓝牙连接判定过程的诊断文本（写入时自动带时间戳） */
+    var btLastEvent: String
+        get() = prefs.getString(KEY_BT_LAST_EVENT, "") ?: ""
+        set(value) {
+            val ts = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                .format(java.util.Date())
+            prefs.edit().putString(KEY_BT_LAST_EVENT, "[$ts] $value").apply()
+        }
 
     fun loadPhotos(): MutableList<CameraPhoto> {
         val stored = prefs.getString(KEY_CAMERA_PHOTOS, null)
