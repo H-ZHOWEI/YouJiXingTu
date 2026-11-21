@@ -66,8 +66,8 @@ class RecordFragment : Fragment() {
     private lateinit var notifPermissionLauncher: ActivityResultLauncher<String>
     /** v1.18：申请通知权限后是否要启动保活服务 */
     private var pendingStartWatch = false
-    /** v1.19：程序化回显总开关时抑制其监听，避免误触发停/启服务 */
-    private var suppressBtMaster = false
+    /** v1.19：程序化回显三个蓝牙开关时统一抑制监听，避免误触发停/启服务 */
+    private var suppressBtUi = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -379,7 +379,7 @@ class RecordFragment : Fragment() {
         }
         // v1.19：整套方案总开关——关掉后本软件完全不插手、不耗电，交给手机系统自带功能
         binding.btMasterCheck.setOnCheckedChangeListener { _, checked ->
-            if (suppressBtMaster) return@setOnCheckedChangeListener
+            if (suppressBtUi) return@setOnCheckedChangeListener
             Repository.btUseOwnSolution = checked
             if (!checked) {
                 BluetoothWatchService.stop(requireContext())
@@ -395,6 +395,7 @@ class RecordFragment : Fragment() {
             refreshBluetoothCard()
         }
         binding.btKeepAliveCheck.setOnCheckedChangeListener { _, checked ->
+            if (suppressBtUi) return@setOnCheckedChangeListener
             if (checked) {
                 // Android 13+ 前台服务通知需要 POST_NOTIFICATIONS
                 if (Build.VERSION.SDK_INT >= 33 &&
@@ -416,6 +417,7 @@ class RecordFragment : Fragment() {
             refreshBluetoothCard()
         }
         binding.btEnabledCheck.setOnCheckedChangeListener { _, checked ->
+            if (suppressBtUi) return@setOnCheckedChangeListener
             if (Repository.btDeviceName.isBlank()) {
                 if (checked) {
                     requireContext().toast("请先填写蓝牙名称并保存")
@@ -503,11 +505,14 @@ class RecordFragment : Fragment() {
             binding.btNameInput.setText(name)
         }
         val useOwn = Repository.btUseOwnSolution
-        suppressBtMaster = true
+        // v1.20：三个开关统一抑制监听——程序化回显 isChecked 时若触发监听器，
+        // 会在总开关关闭的情况下误启动保活服务（btKeepAliveCheck 的监听器里会 start），
+        // 导致「关闭总开关」仍耗电。用标志位一次性屏蔽全部回显。
+        suppressBtUi = true
         binding.btMasterCheck.isChecked = useOwn
-        suppressBtMaster = false
         binding.btEnabledCheck.isChecked = Repository.btAutoStartEnabled && name.isNotBlank()
         binding.btKeepAliveCheck.isChecked = Repository.btKeepAlive
+        suppressBtUi = false
         // 总开关关闭时把下面的子项置灰，表示本方案整体不生效
         val subEnabled = useOwn
         binding.btNameInput.isEnabled = subEnabled
